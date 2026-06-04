@@ -1206,11 +1206,23 @@ def process_question(question):
                     "source": "sql:sonasid",
                 }
             )
+    if re.search(r"\barrivages?\b", ql) and re.search(r"\bqualit", ql, re.I):
+        if isinstance(result, list) and result and isinstance(result[0], (list, tuple)) and len(result[0]) >= 2:
+            return attach_rewrite(
+                {
+                    "question": question,
+                    "result": _format_rows(ql, result),
+                    "source": "sql:sonasid",
+                    "notice": "Répartition des arrivages par qualité (via commandes liées).",
+                }
+            )
     if re.search(r"\barrivages?\b", ql) and (
         re.search(r"\b(nombre|combien|count)\b", ql)
         or re.search(r"\bnombre_arrivages\b", (sql or ""), re.I)
     ):
-        if "par mois" not in ql and "par semaine" not in ql and "par jour" not in ql and "tonnage" not in ql:
+        if re.search(r"\bqualit", ql, re.I):
+            pass
+        elif "par mois" not in ql and "par semaine" not in ql and "par jour" not in ql and "tonnage" not in ql:
             n = int(value) if value == int(value) else value
             return attach_rewrite(
                 {
@@ -1221,12 +1233,21 @@ def process_question(question):
                     "source": "sql:sonasid",
                 }
             )
-    if re.search(r"\btonnage\b", ql) and "par mois" not in ql and "par semaine" not in ql and "par jour" not in ql:
-        is_import = bool(re.search(r"\bimport", ql, re.I))
+    if (
+        re.search(r"\btonnage\b", ql) or re.search(r"\b(marchandise|valeur)\b", ql, re.I)
+    ) and "par mois" not in ql and "par semaine" not in ql and "par jour" not in ql:
+        is_import = bool(
+            re.search(r"\bimport", ql, re.I)
+            or re.search(r"\bmarchandise", ql, re.I)
+            or re.search(r"\b(valeur|valeurs)\b.*\bimport", ql, re.I)
+        )
         sql_has_import = bool(re.search(r"\btonnage_importe\b", (sql or ""), re.I))
         key = "tonnage_importe" if (is_import or sql_has_import) else "tonnage_total"
         v = round(float(value), 2) if isinstance(value, (int, float)) else value
-        label = "Tonnage importé" if key == "tonnage_importe" else "Tonnage total"
+        if key == "tonnage_importe" and re.search(r"\b(marchandise|valeur)\b", ql, re.I):
+            label = "Valeur importée (tonnage)"
+        else:
+            label = "Tonnage importé" if key == "tonnage_importe" else "Tonnage total"
         return attach_rewrite(
             {
                 "question": question,
@@ -1250,6 +1271,9 @@ def process_question(question):
                 "Peux-tu reformuler en précisant le KPI et la période ?\n"
                 "Exemples :\n"
                 "- nombre de navires actifs\n"
+                "- valeur des marchandises importées en 2025\n"
+                "- arrivages par qualité en 2025\n"
+                "- tonnage importé par qualité en 2025\n"
                 "- nombre d'arrivages en 2025\n"
                 "- arrivages par mois en 2025\n"
                 "- tonnage total des arrivages 2025"

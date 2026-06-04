@@ -11,7 +11,9 @@ export function buildSonasidWelcomeText(actorName) {
     `Exemples (formules Sonasid) :\n` +
     `- nombre des arrivages\n` +
     `- nombre d'arrivages fournisseur id 1\n` +
+    `- valeur des marchandises importées en ${y}\n` +
     `- tonnage importé en ${y}\n` +
+    `- arrivages par qualité en ${y}\n` +
     `- tonnage importé par qualité en ${y}\n` +
     `- tonnage importé par qualité par mois en ${y}\n` +
     `- tonnage importé fournisseur id 40 en ${y}\n` +

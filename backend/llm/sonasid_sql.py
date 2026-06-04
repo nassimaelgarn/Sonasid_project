@@ -178,7 +178,17 @@ def _wants_transfert_qualite_detail(ql: str) -> bool:
 
 
 def _is_tonnage_importe_question(ql: str) -> bool:
-    return bool(re.search(r"\bimport[eéè]?\b", ql, re.I) and re.search(r"\btonnage\b", ql))
+    if re.search(r"\bimport[eéè]?\b", ql, re.I) and re.search(r"\btonnage\b", ql):
+        return True
+    if re.search(r"\bimport[eéè]?\b", ql, re.I) and re.search(
+        r"\b(marchandise|marchandises)\b", ql, re.I
+    ):
+        return True
+    if re.search(r"\b(valeur|valeurs)\b", ql, re.I) and re.search(
+        r"\b(marchandise|marchandises|import)\b", ql, re.I
+    ):
+        return True
+    return False
 
 
 def _needs_navire_param(ql: str) -> bool:
@@ -263,7 +273,9 @@ def list_sonasid_kpi_catalog() -> List[Dict[str, str]]:
         {"name": "Arrivages par fournisseur", "question": "nombre d'arrivages fournisseur id 1"},
         {"name": "Tonnage importé par fournisseur", "question": "tonnage importé fournisseur id 1"},
         {"name": "Liste des qualités", "question": "liste des qualités"},
+        {"name": "Valeur marchandises importées", "question": f"valeur des marchandises importées en {y}"},
         {"name": "Tonnage importé (année)", "question": "tonnage importé en 2026"},
+        {"name": "Arrivages par qualité", "question": f"arrivages par qualité en {y}"},
         {"name": "Tonnage importé par qualité", "question": f"tonnage importé par qualité en {y}"},
         {"name": "Tonnage importé par qualité par mois", "question": f"tonnage importé par qualité par mois en {y}"},
         {"name": "Tonnage commandé par qualité", "question": f"tonnage commandé par qualité en {y}"},
@@ -304,7 +316,9 @@ def sonasid_kpi_requires_period(question: str) -> bool:
         return bool(question_has_explicit_period(question) or re.search(r"\b20\d{2}\b", ql))
     if re.search(r"\barrivages?\b", ql) and re.search(r"\b(nombre|combien|total|count)\b", ql):
         return bool(question_has_explicit_period(question) or re.search(r"\b20\d{2}\b", ql))
-    if re.search(r"\btonnage\b", ql):
+    if re.search(r"\btonnage\b", ql) or _is_tonnage_importe_question(ql):
+        return bool(question_has_explicit_period(question) or re.search(r"\b20\d{2}\b", ql))
+    if re.search(r"\barrivages?\b", ql) and re.search(r"\bqualit", ql):
         return bool(question_has_explicit_period(question) or re.search(r"\b20\d{2}\b", ql))
     return True
 
@@ -440,11 +454,45 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
                 f"FROM {T_ARRIVAGE} a {where};"
             )
 
+    # --- Arrivages par qualité (répartition — pas confondre avec « navire » seul) ---
+    if (
+        re.search(r"\barrivages?\b", ql)
+        and re.search(r"\bqualit", ql)
+        and not re.search(r"\btransf", ql)
+        and not _is_tonnage_importe_question(ql)
+    ):
+        df = _pick_arrivage_date_field(ql)
+        period = _optional_arrivage_period_clause(q, ql, alias="a")
+        w = _tsql_where_range(
+            f"a.{df}", q, allow_default_year=not question_has_explicit_period(q)
+        )
+        where = _combine_where(w, period)
+        if re.search(r"\b(par mois|mensuel|chaque mois)\b", ql):
+            return (
+                f"SELECT CONVERT(char(7), a.{df}, 126) AS periode, q.Qualite_Libelle, "
+                f"COUNT(DISTINCT a.Arrivage_Id) AS nombre_arrivages "
+                f"FROM {T_ARRIVAGE} a "
+                f"INNER JOIN {T_COMMANDE} c ON c.Commande_ArrivageId = a.Arrivage_Id "
+                f"INNER JOIN {T_QUALITE} q ON c.Commande_QualiteId = q.Qualite_Id "
+                f"{where} "
+                f"GROUP BY CONVERT(char(7), a.{df}, 126), q.Qualite_Libelle "
+                f"ORDER BY periode, q.Qualite_Libelle;"
+            )
+        return (
+            f"SELECT q.Qualite_Id, q.Qualite_Libelle, COUNT(DISTINCT a.Arrivage_Id) AS nombre_arrivages "
+            f"FROM {T_ARRIVAGE} a "
+            f"INNER JOIN {T_COMMANDE} c ON c.Commande_ArrivageId = a.Arrivage_Id "
+            f"INNER JOIN {T_QUALITE} q ON c.Commande_QualiteId = q.Qualite_Id "
+            f"{where} "
+            f"GROUP BY q.Qualite_Id, q.Qualite_Libelle "
+            f"ORDER BY nombre_arrivages DESC, q.Qualite_Libelle;"
+        )
+
     # --- Navires ---
     if re.search(r"\bnavires?\b", ql) and re.search(
         r"\b(nombre|combien|count|total|liste)\b", ql
     ):
-        if not re.search(r"\btransf", ql) and not _is_dechargement_question(ql):
+        if not re.search(r"\bqualit", ql) and not re.search(r"\btransf", ql) and not _is_dechargement_question(ql):
             nav_joins = (
                 f"INNER JOIN {T_NOMINATION} nn ON a.Arrivage_Id = nn.NominationNavire_ArrivageId "
                 f"INNER JOIN {T_NAVIRE} nv ON nn.NominationNavire_NavireId = nv.Navire_Id "
@@ -675,7 +723,7 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
         w = _tsql_where_range(
             df,
             q,
-            allow_default_year=bool(question_has_explicit_period(q) or re.search(r"\b20\d{2}\b", ql)),
+            allow_default_year=not question_has_explicit_period(q),
         )
         if re.search(r"\b(par mois|mensuel)\b", ql):
             return (
@@ -684,11 +732,10 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
                 f"FROM {T_ARRIVAGE} {w} "
                 f"GROUP BY CONVERT(char(7), {df}, 126) ORDER BY periode;"
             )
-        if w:
-            return (
-                f"SELECT SUM(COALESCE(Arrivage_TonnageTotal, 0)) AS tonnage_importe "
-                f"FROM {T_ARRIVAGE} {w};"
-            )
+        return (
+            f"SELECT SUM(COALESCE(Arrivage_TonnageTotal, 0)) AS tonnage_importe "
+            f"FROM {T_ARRIVAGE} {w};"
+        )
 
     # --- Tonnage global avec période (POC) ---
     if re.search(r"\btonnage\b", ql) and not re.search(r"\bfournisseur\b", ql) and not re.search(
