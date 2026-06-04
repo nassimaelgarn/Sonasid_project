@@ -7,6 +7,7 @@
   },
   "users": {
     "Abdelkaioume Ammour": "analyst_2025_2026",
+    "Adil Jiri": "analyst_2025_2026",
     "Nassima EL GARN": "analyst_2026",
     "Admin": "admin"
   },
@@ -15,7 +16,8 @@
     "nassima.elgarn@uir.ac.ma": "analyst_2026"
   },
   "users_by_username": {
-    "abdelkaioume.ammour": "analyst_2025_2026"
+    "abdelkaioume.ammour": "analyst_2025_2026",
+    "adil.jiri": "analyst_2025_2026"
   },
   "default_role": "analyst_2026"
 }

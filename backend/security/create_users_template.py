@@ -18,6 +18,7 @@ def main() -> None:
     # - Local code login: username + code + role (+ display_name/email/enabled)
     ws.append(["username", "code", "display_name", "email", "role", "enabled"])
     ws.append(["abdelkaioume.ammour", "Am1122", "Abdelkaioume Ammour", "ammour@company.com", "analyst_2025_2026", 1])
+    ws.append(["adil.jiri", "AdiL1122", "Adil Jiri", "", "analyst_2025_2026", 1])
     ws.append(["nassima.elgarn", "Na1122", "Nassima EL GARN", "nassima.elgarn@uir.ac.ma", "analyst_2026", 1])
     ws.append(["admin", "Ad1122", "Admin", "admin@company.com", "admin", 1])
 

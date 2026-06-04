@@ -252,6 +252,7 @@ def list_sonasid_kpi_catalog() -> List[Dict[str, str]]:
     y = str(_default_calendar_year())
     return [
         {"name": "Navires actifs", "question": "nombre de navires actifs"},
+        {"name": "Navires actifs par mois", "question": f"nombre de navires actifs par mois en {y}"},
         {"name": "Navires en déchargement", "question": "nombre de navires en déchargement"},
         {"name": "Liste navires en déchargement", "question": "liste des navires en déchargement"},
         {"name": "Tonnage déchargé (en cours)", "question": "tonnage déchargé en déchargement"},
@@ -294,6 +295,8 @@ def sonasid_kpi_requires_period(question: str) -> bool:
         if re.search(r"\btonnage\b", ql) or re.search(r"\btaux\b", ql):
             return bool(question_has_explicit_period(question) or re.search(r"\b20\d{2}\b", ql))
     if re.search(r"\bnavires?\b", ql) and not re.search(r"\barrivages?\b", ql):
+        if re.search(r"\b(par mois|mensuel|chaque mois|mois par mois)\b", ql):
+            return True
         return False
     if re.search(r"\b(par mois|mensuel|chaque mois|mois par mois|par semaine|par jour)\b", ql):
         return True
@@ -442,6 +445,29 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
         r"\b(nombre|combien|count|total|liste)\b", ql
     ):
         if not re.search(r"\btransf", ql) and not _is_dechargement_question(ql):
+            nav_joins = (
+                f"INNER JOIN {T_NOMINATION} nn ON a.Arrivage_Id = nn.NominationNavire_ArrivageId "
+                f"INNER JOIN {T_NAVIRE} nv ON nn.NominationNavire_NavireId = nv.Navire_Id "
+            )
+            if re.search(r"\b(par mois|mensuel|chaque mois|mois par mois)\b", ql) and re.search(
+                r"\b(nombre|combien|count|total)\b", ql
+            ):
+                df = _pick_arrivage_date_field(ql)
+                col = f"a.{df}"
+                w = _tsql_where_range(col, q, allow_default_year=not question_has_explicit_period(q))
+                if re.search(r"\bactifs?\b", ql):
+                    w = _combine_where(w, "nv.Navire_Active = 1")
+                alias = (
+                    "nombre_navires_actifs"
+                    if re.search(r"\bactifs?\b", ql)
+                    else "nombre_navires"
+                )
+                return (
+                    f"SELECT CONVERT(char(7), {col}, 126) AS periode, "
+                    f"COUNT(DISTINCT nv.Navire_Id) AS {alias} "
+                    f"FROM {T_ARRIVAGE} a {nav_joins}{w} "
+                    f"GROUP BY CONVERT(char(7), {col}, 126) ORDER BY periode;"
+                )
             where = "WHERE Navire_Active = 1" if re.search(r"\bactifs?\b", ql) else ""
             return f"SELECT COUNT(*) AS nombre_navires FROM {T_NAVIRE} {where};".strip()
 

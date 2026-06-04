@@ -22,6 +22,8 @@ export function buildSonasidWelcomeText(actorName) {
     `- tonnage transféré par qualité détail en ${y}\n` +
     `- tonnage transféré par qualité navire id 1\n` +
     `- nombre de navires actifs\n` +
+    `- nombre de navires actifs par mois en ${y}\n` +
+    `- nombre de navires actifs par mois en 2025 (si accès RBAC)\n` +
     `- nombre de navires en déchargement\n` +
     `- liste des navires en déchargement\n` +
     `- tonnage déchargé en déchargement · tonnage restant à décharger\n` +

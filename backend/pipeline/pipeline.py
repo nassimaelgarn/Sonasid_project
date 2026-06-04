@@ -1179,6 +1179,21 @@ def process_question(question):
             r"\bnombre_navires_en_dechargement\b", (sql or ""), re.I
         ):
             pass
+        elif any(x in ql for x in ["par mois", "mensuel", "chaque mois"]) and isinstance(
+            result, list
+        ) and result and isinstance(result[0], (list, tuple)) and len(result[0]) >= 2:
+            out: Dict[str, Any] = {
+                "question": question,
+                "result": _format_rows(ql, result),
+                "source": "sql:sonasid",
+            }
+            if re.search(r"\bactifs?\b", ql):
+                out["notice"] = (
+                    "Série mensuelle : navires actifs (référentiel) ayant au moins un arrivage "
+                    "ce mois-là. Le total « 69 » sans « par mois » est l’effectif actuel du référentiel, "
+                    "pas une série historique."
+                )
+            return attach_rewrite(out)
         else:
             label = "Navires actifs" if re.search(r"\bactifs?\b", ql) else "Navires"
             n = int(value) if value == int(value) else value
