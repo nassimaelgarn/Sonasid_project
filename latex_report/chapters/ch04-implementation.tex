@@ -1,0 +1,49 @@
+\chapter{Implementation}
+
+\section{Development environment}
+\subsection{Backend environment}
+Python virtual environment, FastAPI/Uvicorn, Pydantic models, optional OpenRouter or local LLM providers, environment variables in \texttt{.env}, and \texttt{PYTHONPATH} pointing to the project root.
+
+\subsection{Frontend environment}
+Node.js LTS, React, Vite, Tailwind CSS, ESLint, Chart.js integration for KPI charts.
+
+\subsection{Database environment}
+SQLite for local KPI and RAG databases; Azure SQL with ODBC/pyodbc for production-style runs; table name mapping via environment variables.
+
+\subsection{Development and collaboration tools}
+Visual Studio Code, Git/GitHub, browser developer tools, Postman or curl for API checks, Mermaid for diagrams.
+
+\section{Main modules and components}
+\subsection{Frontend components}
+\textbf{AuthGate.jsx} --- Microsoft SSO and local login, session probe via \texttt{/auth/me}, cookie-aware fetch. \textbf{ChatWorkspace.jsx} --- central chat UI, period presets, quick actions, speech-to-text, history, feedback UI, call to \texttt{/feedback} and \texttt{/chat/retry}. \textbf{DashboardKPI.jsx} --- structured KPI views (scalars, tables, charts).
+
+\subsection{Backend components}
+\textbf{app.py} --- FastAPI application, routes for auth, chat, retry, conversations, feedback. \textbf{graph.py} --- conversational router (KPI, chat, clarify, compare). \textbf{pipeline.py} --- KPI rule engine, SQL execution orchestration, result formatting. \textbf{llm\_sql.py} --- temporal parsing, follow-up merging, SQL utilities. \textbf{run\_query.py} --- SQLite/Azure execution and dialect translation. \textbf{access\_control.py} --- RBAC enforcement on KPI-like questions. \textbf{store.py} --- conversation chunks, titles, \texttt{chat\_feedback} persistence and FTS.
+
+\section{Difficulties encountered and solutions}
+\subsection{Azure SQL compatibility}
+Implemented systematic SQLite-to-T-SQL rewrites for date grouping, table identifiers, and tested against Azure object names.
+
+\subsection{Conversational and KPI ambiguity}
+Router plus clarification prompts; period injection only for KPI-like utterances; \texttt{notice} field communicates applied ranges.
+
+\subsection{Follow-up context}
+History-backed merging for period-only replies (e.g.\ month after a KPI clarification).
+
+\subsection{Conversation isolation between users}
+Server-side scoping of \texttt{session\_id} with authenticated user prefix.
+
+\subsection{RBAC and access control}
+RBAC applied only when heuristics detect KPI intent, preserving conversational UX.
+
+\subsection{Speech-to-text reliability}
+Optional feature with graceful degradation when the Web Speech API is unavailable.
+
+\subsection{Frontend period synchronization}
+UI sends \texttt{period\_preset} and explicit ranges; backend is authoritative on whether to merge them into the question.
+
+\subsection{Microsoft SSO redirect and cookies}
+Entra ID allows \texttt{http://localhost} redirect URIs for Web apps (not \texttt{127.0.0.1}); signed OAuth \texttt{state} avoids BAD\_STATE when session cookies are dropped; SPA host normalized to \texttt{localhost} where needed so session cookies align with API origin.
+
+\section{User feedback mechanism}
+Users may rate each assistant answer with \textbf{thumbs up} (\texttt{rating=1}) or \textbf{thumbs down} (\texttt{rating=-1}) via \texttt{POST /feedback}. Negative feedback is stored with full-text search support; \texttt{POST /chat/retry} performs a regeneration pass with an explicit correction hint in conversation memory.

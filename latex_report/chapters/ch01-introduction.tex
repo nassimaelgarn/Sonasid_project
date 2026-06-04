@@ -1,0 +1,50 @@
+\chapter{Introduction}
+
+The rapid growth of digital technologies and artificial intelligence has considerably transformed the way industrial companies manage and exploit operational data. In modern industrial environments such as steel production, large volumes of structured data are continuously generated from production processes, energy consumption, maintenance operations, and equipment performance. These data are generally monitored through traditional dashboards and reporting tools designed to support operational analysis and decision-making.
+
+However, conventional Business Intelligence solutions often present important limitations. Most dashboards rely on rigid navigation structures, predefined filters, and technical expertise, making data exploration complex and time-consuming for non-specialist users. In addition, the increasing complexity of industrial data creates challenges related to accessibility, usability, contextual interpretation, and secure access management.
+
+In this context, Alexsys Solutions identified the need for a more intelligent and user-friendly solution capable of simplifying KPI consultation while maintaining the reliability and precision required in industrial environments. The objective of this project is therefore to design and develop an intelligent conversational assistant inspired by modern AI systems, allowing users to interact with industrial Key Performance Indicators (KPIs) using natural language queries.
+
+The proposed solution is a web-based AI Assistant dedicated to KPI analysis within a steel production environment, specifically for Sonasid. The application combines conversational interaction, structured SQL-based analytics, graphical visualization, and secure access management within a modern client--server architecture based on React and FastAPI. The system enables users to retrieve scalar KPI values or time-series data, apply temporal filters, visualize trends through charts, and interact naturally with the platform through contextual conversations.
+
+The developed platform also integrates advanced functionalities such as conversational intent classification, contextual follow-up management, Role-Based Access Control (RBAC), dual authentication through Microsoft Single Sign-On (SSO) and local login, as well as isolated conversation histories for each user. The application was initially developed using SQLite for rapid prototyping before being adapted to Azure SQL to ensure enterprise-level compatibility and scalability.
+
+\section{Host organization}
+Alexsys Solutions is a Moroccan company specialized in digital transformation, innovative technologies, and IT consulting services. Founded in 2020, the company supports both public and private organizations in the modernization of their information systems and business processes. Through its expertise in software engineering, cloud computing, artificial intelligence, and data analysis, Alexsys Solutions provides innovative and customized solutions adapted to the needs of different industrial and institutional sectors.
+
+The graduation project was carried out within Alexsys Solutions for an industrial client operating in the steel production sector, namely Sonasid. The project aimed to design and implement an intelligent assistant capable of simplifying the consultation and analysis of industrial KPIs through natural language interaction.
+
+\subsection{Areas of expertise}
+Alexsys Solutions operates across Data \& Artificial Intelligence, Cloud \& Infrastructure, Smart Industry, Digital Transformation, and Cybersecurity, enabling end-to-end delivery from data ingestion to intelligent analytics.
+
+\subsection{Organizational structure}
+The company follows a hierarchical structure headed by the CEO, with specialized departments and team leaders ensuring agile delivery and quality of service.
+
+\section{International University of Rabat}
+The International University of Rabat (UIR) is a higher education institution recognized for its commitment to academic excellence, innovation, and research in engineering and digital technologies. This graduation project applies the competencies acquired in software engineering, artificial intelligence, and information systems to a real industrial use case in collaboration with Alexsys Solutions.
+
+\section{Project objectives and work plan}
+The main objective is to design and develop an intelligent conversational assistant dedicated to industrial KPI analysis. Functional and technical objectives include:
+\begin{itemize}[leftmargin=*]
+  \item A modern conversational web application inspired by mainstream AI assistants;
+  \item Natural language querying of industrial KPIs;
+  \item Temporal filtering and graphical KPI visualization;
+  \item Conversational context management and follow-up handling;
+  \item Secure access through authentication and RBAC;
+  \item Microsoft SSO and local authentication;
+  \item Compatibility with SQLite (development) and Azure SQL (enterprise);
+  \item Improved accessibility and usability of industrial analytical systems.
+\end{itemize}
+The work was organized into requirements analysis, design, implementation, database integration, security configuration, testing, validation, and deployment preparation.
+
+\section{Problem description}
+Industrial companies generate large volumes of operational and analytical data. Although traditional BI dashboards provide visualization and reporting functionalities, they often require advanced technical expertise and complex navigation. Users frequently need to navigate through multiple dashboards and filters to access a single KPI. Existing systems generally lack conversational interaction, contextual understanding, and intelligent assistance, while secure access management and fine-grained authorization remain challenging.
+
+The main challenge is therefore to design a \emph{reliable and secure} conversational assistant that simplifies KPI consultation through natural language while maintaining analytical rigor and deterministic reliability.
+
+\section{Existing solutions and limitations}
+Several BI platforms exist (e.g.\ Power BI, Tableau, Grafana). They provide dashboards and filters but often require predefined navigation, technical knowledge, and offer limited or no conversational context. Generic LLM assistants may produce non-deterministic analytical outputs when directly connected to industrial databases. The proposed solution combines conversational interaction with deterministic SQL-driven KPI analytics, contextual dialogue management, and secure industrial access control.
+
+\section{Report structure}
+This report comprises six chapters: (1) Introduction; (2) State of the art; (3) Methodology and design; (4) Implementation; (5) Results and evaluation; (6) Conclusions and future work.

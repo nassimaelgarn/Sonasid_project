@@ -1,0 +1,27 @@
+\chapter{State of the Art}
+
+\section{Domain context}
+In modern industrial environments, digital transformation has led to the generation of massive volumes of operational and production data. Steel manufacturing and related sectors rely heavily on KPIs to monitor production efficiency, equipment reliability, energy consumption, maintenance activities, and overall operational performance.
+
+Traditionally, KPI monitoring is performed through dashboards and BI tools. Although these systems provide structured visualization, users often navigate multiple interfaces and filters to reach the desired information, which is time-consuming for non-technical users.
+
+The emergence of conversational systems and LLMs offers more natural access patterns. However, direct generative answers on numeric KPIs raise concerns about hallucination, traceability, and SQL safety in enterprise settings.
+
+\section{Technologies and tools}
+\subsection{Frontend technologies}
+The frontend uses \textbf{React} with \textbf{Vite} as the build tool, \textbf{Tailwind CSS} for styling, and the \textbf{Fetch API} for JSON communication with the backend. Time-series and bar charts are rendered with \textbf{Chart.js} (via \texttt{react-chartjs-2}). Optional \textbf{speech-to-text} uses the browser Web Speech API where available.
+
+\subsection{Backend technologies}
+The backend is implemented in \textbf{Python} with \textbf{FastAPI}, exposing REST endpoints for chat, authentication, conversation history, and feedback. Session-based authentication uses Starlette \textbf{SessionMiddleware}. An agent/router layer orchestrates KPI processing versus general conversation.
+
+\subsection{Database technologies}
+\textbf{SQLite} supports rapid local prototyping (\texttt{sonasid.db} for KPI data, \texttt{rag.db} for conversation memory and feedback). \textbf{Azure SQL (T-SQL)} targets enterprise deployment with a translation layer bridging dialect differences.
+
+\subsection{Artificial intelligence and conversational logic}
+The system combines deterministic KPI pipelines with optional LLM-assisted paths (e.g.\ SQL generation guarded by validation). \textbf{RAG}-style memory stores conversations; negative user feedback can be retrieved to enrich context and reduce repeated mistakes.
+
+\subsection{Security and authentication}
+\textbf{Microsoft Entra ID (Azure AD)} SSO and \textbf{local} authentication coexist. \textbf{RBAC} restricts KPI access by authorized calendar years while leaving general chat unaffected.
+
+\section{Critical analysis}
+Pure NL2SQL with unconstrained LLMs trades flexibility for industrial risk. Pure dashboards trade reliability for accessibility. The hybrid architecture adopted in this project explicitly targets \textbf{repeatable SQL-first KPI answers}, conversational UX, and \textbf{governance} (RBAC, SSO, auditable notices on applied periods).

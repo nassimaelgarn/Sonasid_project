@@ -1,0 +1,53 @@
+\chapter{Methodology and Design}
+
+\section{Requirements analysis}
+\subsection{Functional requirements}
+\begin{itemize}[leftmargin=*]
+  \item Natural-language KPI queries with scalar, tabular, or time-series responses;
+  \item Temporal presets and explicit date ranges with transparent server-side application;
+  \item Conversational intent routing (KPI vs chat vs clarification vs comparison flows);
+  \item Conversation history, titles, and per-user isolation;
+  \item Dual authentication (Microsoft SSO and local);
+  \item User feedback (\textbf{thumbs up / thumbs down}) with optional automatic retry after negative feedback;
+  \item Account settings and profile fields where configured.
+\end{itemize}
+
+\subsection{Non-functional requirements}
+Performance suitable for interactive chat; maintainability through modular backend packages; security (sessions, RBAC, SQL guardrails); compatibility between SQLite and T-SQL; clear error and access-denied responses.
+
+\subsection{User profiles}
+Typical personas include operators, analysts, and managers with different authorized years and roles (see RBAC configuration).
+
+\subsection{UML and diagrams}
+\textit{Insert your class, activity, use case, sequence, and global architecture diagrams exported from Mermaid or Enterprise Architect as PDF/PNG figures, e.g.\ \texttt{\textbackslash includegraphics\{figs/usecase.pdf\}}.}
+
+\section{System architecture}
+The solution follows a \textbf{client--server} architecture: a React SPA, a FastAPI API layer, conversational routing and KPI pipelines, and \textbf{multiple persistence backends}: KPI warehouse (SQLite or Azure SQL), conversation store (SQLite \texttt{rag.db}), and file-based configuration for RBAC and local users.
+
+\subsection{Frontend layer}
+Responsible for authentication UI, chat workspace, period controls, quick actions, charts/tables, and account settings. Main components: \texttt{AuthGate.jsx}, \texttt{ChatWorkspace.jsx}, \texttt{DashboardKPI.jsx}.
+
+\subsection{Backend layer}
+Exposes REST endpoints; enforces sessions and RBAC; routes intents (\texttt{graph.py}); executes KPI logic (\texttt{pipeline.py}); parses periods and SQL helpers (\texttt{llm\_sql.py}); runs queries with dialect adaptation (\texttt{run\_query.py}); persists memory and feedback (\texttt{store.py}); applies RBAC (\texttt{access\_control.py}).
+
+\subsection{Data and persistence layer}
+KPI data in the configured analytical database; chat memory and \texttt{chat\_feedback} in \texttt{rag.db}; optional user profiles in JSON; RBAC mapping in \texttt{rbac.json}; local users via Excel or environment JSON as implemented.
+
+\subsection{Security layer}
+Microsoft Entra ID OAuth2, local login, signed OAuth \texttt{state} for SSO resilience, server-side session cookies, RBAC on KPI-like questions, scoped conversation identifiers per authenticated user.
+
+\section{Design choices and justification}
+\subsection{React for the frontend}
+Component model, ecosystem maturity, and suitability for highly interactive chat and dashboard UIs.
+
+\subsection{FastAPI for the backend}
+Performance for I/O-bound APIs, automatic OpenAPI documentation, and native integration with Python analytics and LLM libraries.
+
+\subsection{Hybrid conversational architecture}
+Separates general chat from deterministic KPI processing to limit hallucinated metrics while preserving natural dialogue.
+
+\subsection{SQLite and Azure SQL compatibility}
+Accelerates development; \texttt{run\_query.py} centralizes T-SQL translation (temporal grouping, table name mapping, \texttt{GROUP BY} quirks).
+
+\subsection{Security and RBAC design}
+Year-scoped access for KPI questions; SSO for enterprise identity; feedback and retry hooks for continuous improvement.

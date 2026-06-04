@@ -1,0 +1,33 @@
+\chapter{Results and Evaluation}
+
+\section{Tests and validation}
+\subsection{Functional validation}
+Manual and automated checks of authentication flows, chat endpoint contracts, and conversation listing scoped per user.
+
+\subsection{Conversational behavior validation}
+Scenarios for greetings, KPI queries, missing period prompts, follow-up messages, and quick actions (change granularity, shift year).
+
+\subsection{KPI and graphical visualization testing}
+Validation of scalar JSON, category/value tables, and \texttt{\{period, value\}} series rendered as charts.
+
+\subsection{RBAC and security testing}
+Attempts to query unauthorized years must return access denied without blocking general chat.
+
+\subsection{Azure SQL compatibility testing}
+Regression runs of translated SQL against Azure objects and drivers.
+
+\subsection{Speech-to-text validation}
+Optional browser-dependent checks.
+
+\section{Discussion}
+\subsection{Solution analysis}
+The system meets the objective of combining conversational access with deterministic KPI computation for industrial use. The hybrid pipeline reduces uncontrolled generative risk while preserving UX.
+
+\subsection{Comparison with existing approaches}
+Compared with traditional BI dashboards, the assistant improves accessibility; compared with LLM-only chat, it improves numeric reliability through SQL-first processing and RBAC.
+
+\subsection{User feedback (thumbs up / down)}
+Binary feedback creates an auditable corpus for quality improvement and feeds retrieval of past negative ratings into contextualization to avoid repeating similar mistakes.
+
+\subsection{Limitations and challenges}
+Binary feedback lacks structured error categories; LLM fallback paths require ongoing guardrail testing; SSO and cookie policies vary by browser; maintenance of KPI rules grows with schema evolution.

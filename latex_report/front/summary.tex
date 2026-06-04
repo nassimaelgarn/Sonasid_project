@@ -1,0 +1,9 @@
+\chapter*{Summary}
+\addcontentsline{toc}{chapter}{Summary}
+This graduation project focuses on the design and development of an intelligent conversational assistant dedicated to the analysis of industrial Key Performance Indicators (KPIs) within a steel production environment at Sonasid. The main objective is to simplify access to industrial data by allowing users to query KPIs using natural language instead of relying solely on traditional dashboards and complex reporting tools.
+
+The proposed solution is a web application built with a React frontend and a FastAPI backend. The system combines a conversational interface with a rule-based analytical engine capable of processing KPI-related requests through structured SQL queries. Users can retrieve scalar indicators or time-series data, visualize trends through charts, and filter results using multiple temporal granularities such as day, week, month, or year.
+
+The project emphasizes security and governance through RBAC, dual authentication (Microsoft SSO and local login), and isolated conversation histories per user. The solution was initially developed using SQLite before being adapted to Azure SQL, requiring dialect compatibility and query translation mechanisms.
+
+This work demonstrates the potential of integrating conversational AI concepts with industrial information systems in order to improve accessibility to operational data and support faster and more efficient decision-making processes.

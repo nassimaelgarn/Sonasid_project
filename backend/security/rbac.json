@@ -1,0 +1,22 @@
+{
+  "roles": {
+    "admin": { "allow": "all" },
+    "analyst_2026": { "allow_years": ["2026"] },
+    "analyst_2025": { "allow_years": ["2025"] },
+    "analyst_2025_2026": { "allow_years": ["2025", "2026"] }
+  },
+  "users": {
+    "Abdelkaioume Ammour": "analyst_2025_2026",
+    "Nassima EL GARN": "analyst_2026",
+    "Admin": "admin"
+  },
+  "users_by_email": {
+    "ammour@company.com": "analyst_2025_2026",
+    "nassima.elgarn@uir.ac.ma": "analyst_2026"
+  },
+  "users_by_username": {
+    "abdelkaioume.ammour": "analyst_2025_2026"
+  },
+  "default_role": "analyst_2026"
+}
+

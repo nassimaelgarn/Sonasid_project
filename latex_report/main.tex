@@ -1,0 +1,41 @@
+%% UIR Final Year Project — LaTeX master (compile with: pdflatex main && pdflatex main)
+\documentclass[12pt,a4paper,openany]{report}
+\input{preamble}
+
+\title{AI Assistant for KPI Analysis in Industrial Environment}
+\author{Nassima EL GARN}
+\date{2021--2026}
+
+\begin{document}
+\pagenumbering{roman}
+\input{front/titlepage}
+\input{front/dedication}
+\input{front/acknowledgements}
+\input{front/abstract}
+\input{front/summary}
+\input{front/abbreviations}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\newpage
+\pagenumbering{arabic}
+
+\input{chapters/ch01-introduction}
+\input{chapters/ch02-state-of-art}
+\input{chapters/ch03-methodology}
+\input{chapters/ch04-implementation}
+\input{chapters/ch05-results}
+\input{chapters/ch06-conclusion}
+
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+\bibitem{ref_bi} Few, S.\ \emph{Information Dashboard Design}. Analytics Press, 2006.
+\bibitem{ref_llm} OpenAI.\ Documentation and best practices for LLM-based applications, 2024.
+\bibitem{ref_fastapi} Ramírez, S.\ \emph{FastAPI framework documentation}, \url{https://fastapi.tiangolo.com}.
+\bibitem{ref_react} Meta.\ \emph{React documentation}, \url{https://react.dev}.
+\bibitem{ref_azure} Microsoft.\ \emph{Azure SQL Database documentation}, \url{https://learn.microsoft.com/azure/sql-database/}.
+\end{thebibliography}
+
+\end{document}

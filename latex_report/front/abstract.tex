@@ -1,0 +1,18 @@
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+This graduation project presents the design and development of an intelligent web-based assistant dedicated to the analysis of industrial Key Performance Indicators (KPIs) within a steel production environment, specifically at Sonasid. Modern industrial systems continuously generate large volumes of structured operational data related to production, energy consumption, maintenance, reliability, and process efficiency. However, traditional dashboard solutions often rely on rigid navigation structures and require advanced technical expertise, which can limit accessibility and slow down data exploration and decision-making processes.
+
+To address these challenges, the proposed solution introduces a conversational assistant that enables users to interact with industrial KPIs through natural language queries while preserving the analytical reliability required in industrial contexts.
+
+The developed system follows a client--server architecture combining a React frontend with a FastAPI backend. Its analytical core adopts a hybrid approach in which KPI requests are primarily processed using deterministic business rules and structured SQL query generation. This architecture guarantees reliable, reproducible, and transparent numerical outputs while supporting advanced temporal filtering capabilities, including daily, weekly, monthly, and yearly granularities. Depending on the user request, the system can return either scalar KPI values or time-series data suitable for graphical visualization and trend analysis.
+
+To provide a more natural and intelligent interaction experience, the platform integrates a conversational layer responsible for intent classification and dialogue management. This component distinguishes between analytical KPI requests and general conversational interactions, handles clarification scenarios, and supports contextual multi-turn communication. In particular, the assistant can interpret follow-up messages related to temporal refinement, allowing users to continue conversations naturally without reformulating complete queries.
+
+Security and governance are ensured through the implementation of a Role-Based Access Control (RBAC) mechanism that restricts data visibility according to user roles and authorized periods. The platform also integrates dual authentication methods, including Microsoft Single Sign-On (SSO) and a local credential-based authentication mode designed for controlled internal environments.
+
+From a technical perspective, the application was initially developed and validated using SQLite for rapid prototyping and iterative testing before being adapted to Azure SQL. This transition required the implementation of SQL translation and compatibility mechanisms to handle differences between SQLite syntax and T-SQL while maintaining consistent KPI interpretation and reliable execution.
+
+The resulting application delivers a modern assistant-like user experience inspired by conversational AI systems while preserving the rigor, transparency, and deterministic behavior expected in industrial analytics platforms.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} KPI, conversational AI, FastAPI, React, RBAC, Azure SQL, T-SQL, SQLite, NL2SQL, industrial analytics.

@@ -1,0 +1,389 @@
+%% UIR Final Year Project — SINGLE FILE for Overleaf (copy this entire file as main.tex if you prefer)
+\documentclass[12pt,a4paper,openany]{report}
+
+% ========== PREAMBLE (same as preamble.tex) ==========
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\geometry{a4paper,margin=2.5cm}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,citecolor=blue!55!black,urlcolor=blue!55!black}
+\usepackage{csquotes}
+\usepackage{caption}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,tabsize=2}
+\usepackage{amsmath}
+\usepackage{titlesec}
+\titleformat{\chapter}[display]{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+
+\title{AI Assistant for KPI Analysis in Industrial Environment}
+\author{Nassima EL GARN}
+\date{2021--2026}
+
+\begin{document}
+\pagenumbering{roman}
+
+% ----- titlepage -----
+\begin{titlepage}
+\centering
+\vspace*{1.5cm}
+{\Large INTERNATIONAL UNIVERSITY OF RABAT\par}
+\vspace{0.5cm}
+{\large 2021--2026\par}
+\vspace{2cm}
+{\LARGE\bfseries FINAL YEAR PROJECT\par}
+\vspace{1.5cm}
+{\Large\bfseries AI Assistant for KPI Analysis in Industrial Environment\par}
+\vspace{0.6cm}
+{\large A Conversational System for Querying and Analyzing Industrial Performance Indicators\par}
+\vfill
+{\large\textbf{By:}\\[0.3cm]
+Nassima EL GARN\par}
+\vspace{1.2cm}
+\begin{minipage}{0.9\textwidth}
+\centering
+\textbf{Company supervisor:} Mr.\ Abdelkaioume AMMOUR\\[0.4cm]
+\textbf{Academic supervisor:} Dr.\ Youness MOUKAFIH\\[0.4cm]
+\textbf{Jury members:} \ldots
+\end{minipage}
+\vfill
+{\large \today\par}
+\end{titlepage}
+
+\chapter*{Dedication}
+\addcontentsline{toc}{chapter}{Dedication}
+This work is dedicated to my family and to everyone who supported me throughout this journey. I also dedicate it to my supervisors at Alexsys Solutions and at UIR for their guidance.
+
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+I thank Dr.\ Youness Moukafih for his academic supervision, and Mr.\ Abdelkaioume Ammour and Alexsys Solutions for the professional opportunity and mentorship. I thank the International University of Rabat (UIR) for the academic foundation, and my family and friends for their constant support.
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+This graduation project presents the design and development of an intelligent web-based assistant dedicated to the analysis of industrial Key Performance Indicators (KPIs) within a steel production environment, specifically at Sonasid. Modern industrial systems continuously generate large volumes of structured operational data related to production, energy consumption, maintenance, reliability, and process efficiency. However, traditional dashboard solutions often rely on rigid navigation structures and require advanced technical expertise, which can limit accessibility and slow down data exploration and decision-making processes.
+
+To address these challenges, the proposed solution introduces a conversational assistant that enables users to interact with industrial KPIs through natural language queries while preserving the analytical reliability required in industrial contexts.
+
+The developed system follows a client--server architecture combining a React frontend with a FastAPI backend. Its analytical core adopts a hybrid approach in which KPI requests are primarily processed using deterministic business rules and structured SQL query generation. This architecture guarantees reliable, reproducible, and transparent numerical outputs while supporting advanced temporal filtering capabilities, including daily, weekly, monthly, and yearly granularities. Depending on the user request, the system can return either scalar KPI values or time-series data suitable for graphical visualization and trend analysis.
+
+To provide a more natural and intelligent interaction experience, the platform integrates a conversational layer responsible for intent classification and dialogue management. This component distinguishes between analytical KPI requests and general conversational interactions, handles clarification scenarios, and supports contextual multi-turn communication. In particular, the assistant can interpret follow-up messages related to temporal refinement, allowing users to continue conversations naturally without reformulating complete queries.
+
+Security and governance are ensured through the implementation of a Role-Based Access Control (RBAC) mechanism that restricts data visibility according to user roles and authorized periods. The platform also integrates dual authentication methods, including Microsoft Single Sign-On (SSO) and a local credential-based authentication mode designed for controlled internal environments.
+
+From a technical perspective, the application was initially developed and validated using SQLite for rapid prototyping and iterative testing before being adapted to Azure SQL. This transition required the implementation of SQL translation and compatibility mechanisms to handle differences between SQLite syntax and T-SQL while maintaining consistent KPI interpretation and reliable execution.
+
+The resulting application delivers a modern assistant-like user experience inspired by conversational AI systems while preserving the rigor, transparency, and deterministic behavior expected in industrial analytics platforms.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} KPI, conversational AI, FastAPI, React, RBAC, Azure SQL, T-SQL, SQLite, NL2SQL, industrial analytics.
+
+\chapter*{Summary}
+\addcontentsline{toc}{chapter}{Summary}
+This graduation project focuses on the design and development of an intelligent conversational assistant dedicated to the analysis of industrial Key Performance Indicators (KPIs) within a steel production environment at Sonasid. The main objective is to simplify access to industrial data by allowing users to query KPIs using natural language instead of relying solely on traditional dashboards and complex reporting tools.
+
+The proposed solution is a web application built with a React frontend and a FastAPI backend. The system combines a conversational interface with a rule-based analytical engine capable of processing KPI-related requests through structured SQL queries. Users can retrieve scalar indicators or time-series data, visualize trends through charts, and filter results using multiple temporal granularities such as day, week, month, or year.
+
+The project emphasizes security and governance through RBAC, dual authentication (Microsoft SSO and local login), and isolated conversation histories per user. The solution was initially developed using SQLite before being adapted to Azure SQL, requiring dialect compatibility and query translation mechanisms.
+
+This work demonstrates the potential of integrating conversational AI concepts with industrial information systems in order to improve accessibility to operational data and support faster and more efficient decision-making processes.
+
+\chapter*{List of Abbreviations}
+\addcontentsline{toc}{chapter}{List of Abbreviations}
+\begin{longtable}{@{}p{3.2cm}p{11cm}@{}}
+\toprule
+\textbf{Abbrev.} & \textbf{Meaning} \\
+\midrule
+\endhead
+AI & Artificial Intelligence \\
+API & Application Programming Interface \\
+Azure SQL & Microsoft Azure SQL Database \\
+BI & Business Intelligence \\
+DB & Database \\
+FastAPI & Python web framework for APIs \\
+FE & Frontend \\
+KPI & Key Performance Indicator \\
+LLM & Large Language Model \\
+MTBF & Mean Time Between Failures \\
+MTTR & Mean Time To Repair \\
+NL2SQL & Natural Language to SQL \\
+RBAC & Role-Based Access Control \\
+RAG & Retrieval-Augmented Generation \\
+React & JavaScript frontend library \\
+REST & Representational State Transfer \\
+SQL & Structured Query Language \\
+SQLite & Lightweight relational database \\
+SSO & Single Sign-On \\
+STT & Speech-to-Text \\
+T-SQL & Transact-SQL \\
+TD & Downtime-related rate (context: availability KPIs) \\
+TR & Operational / time rate (context: availability KPIs) \\
+UI & User Interface \\
+UIR & International University of Rabat \\
+UX & User Experience \\
+YTD & Year-To-Date \\
+\bottomrule
+\end{longtable}
+
+\tableofcontents
+\listoffigures
+\listoftables
+\newpage
+\pagenumbering{arabic}
+
+% ========== CHAPTER 1 ==========
+\chapter{Introduction}
+
+The rapid growth of digital technologies and artificial intelligence has considerably transformed the way industrial companies manage and exploit operational data. In modern industrial environments such as steel production, large volumes of structured data are continuously generated from production processes, energy consumption, maintenance operations, and equipment performance. These data are generally monitored through traditional dashboards and reporting tools designed to support operational analysis and decision-making.
+
+However, conventional Business Intelligence solutions often present important limitations. Most dashboards rely on rigid navigation structures, predefined filters, and technical expertise, making data exploration complex and time-consuming for non-specialist users. In addition, the increasing complexity of industrial data creates challenges related to accessibility, usability, contextual interpretation, and secure access management.
+
+In this context, Alexsys Solutions identified the need for a more intelligent and user-friendly solution capable of simplifying KPI consultation while maintaining the reliability and precision required in industrial environments. The objective of this project is therefore to design and develop an intelligent conversational assistant inspired by modern AI systems, allowing users to interact with industrial Key Performance Indicators (KPIs) using natural language queries.
+
+The proposed solution is a web-based AI Assistant dedicated to KPI analysis within a steel production environment, specifically for Sonasid. The application combines conversational interaction, structured SQL-based analytics, graphical visualization, and secure access management within a modern client--server architecture based on React and FastAPI. The system enables users to retrieve scalar KPI values or time-series data, apply temporal filters, visualize trends through charts, and interact naturally with the platform through contextual conversations.
+
+The developed platform also integrates advanced functionalities such as conversational intent classification, contextual follow-up management, Role-Based Access Control (RBAC), dual authentication through Microsoft Single Sign-On (SSO) and local login, as well as isolated conversation histories for each user. The application was initially developed using SQLite for rapid prototyping before being adapted to Azure SQL to ensure enterprise-level compatibility and scalability.
+
+\section{Host organization}
+Alexsys Solutions is a Moroccan company specialized in digital transformation, innovative technologies, and IT consulting services. Founded in 2020, the company supports both public and private organizations in the modernization of their information systems and business processes. Through its expertise in software engineering, cloud computing, artificial intelligence, and data analysis, Alexsys Solutions provides innovative and customized solutions adapted to the needs of different industrial and institutional sectors.
+
+The graduation project was carried out within Alexsys Solutions for an industrial client operating in the steel production sector, namely Sonasid. The project aimed to design and implement an intelligent assistant capable of simplifying the consultation and analysis of industrial KPIs through natural language interaction.
+
+\subsection{Areas of expertise}
+Alexsys Solutions operates across Data \& Artificial Intelligence, Cloud \& Infrastructure, Smart Industry, Digital Transformation, and Cybersecurity, enabling end-to-end delivery from data ingestion to intelligent analytics.
+
+\subsection{Organizational structure}
+The company follows a hierarchical structure headed by the CEO, with specialized departments and team leaders ensuring agile delivery and quality of service.
+
+\section{International University of Rabat}
+The International University of Rabat (UIR) is a higher education institution recognized for its commitment to academic excellence, innovation, and research in engineering and digital technologies. This graduation project applies the competencies acquired in software engineering, artificial intelligence, and information systems to a real industrial use case in collaboration with Alexsys Solutions.
+
+\section{Project objectives and work plan}
+The main objective is to design and develop an intelligent conversational assistant dedicated to industrial KPI analysis. Functional and technical objectives include:
+\begin{itemize}[leftmargin=*]
+  \item A modern conversational web application inspired by mainstream AI assistants;
+  \item Natural language querying of industrial KPIs;
+  \item Temporal filtering and graphical KPI visualization;
+  \item Conversational context management and follow-up handling;
+  \item Secure access through authentication and RBAC;
+  \item Microsoft SSO and local authentication;
+  \item Compatibility with SQLite (development) and Azure SQL (enterprise);
+  \item Improved accessibility and usability of industrial analytical systems.
+\end{itemize}
+The work was organized into requirements analysis, design, implementation, database integration, security configuration, testing, validation, and deployment preparation.
+
+\section{Problem description}
+Industrial companies generate large volumes of operational and analytical data. Although traditional BI dashboards provide visualization and reporting functionalities, they often require advanced technical expertise and complex navigation. Users frequently need to navigate through multiple dashboards and filters to access a single KPI. Existing systems generally lack conversational interaction, contextual understanding, and intelligent assistance, while secure access management and fine-grained authorization remain challenging.
+
+The main challenge is therefore to design a \emph{reliable and secure} conversational assistant that simplifies KPI consultation through natural language while maintaining analytical rigor and deterministic reliability.
+
+\section{Existing solutions and limitations}
+Several BI platforms exist (e.g.\ Power BI, Tableau, Grafana). They provide dashboards and filters but often require predefined navigation, technical knowledge, and offer limited or no conversational context. Generic LLM assistants may produce non-deterministic analytical outputs when directly connected to industrial databases. The proposed solution combines conversational interaction with deterministic SQL-driven KPI analytics, contextual dialogue management, and secure industrial access control.
+
+\section{Report structure}
+This report comprises six chapters: (1) Introduction; (2) State of the art; (3) Methodology and design; (4) Implementation; (5) Results and evaluation; (6) Conclusions and future work.
+
+% ========== CHAPTER 2 ==========
+\chapter{State of the Art}
+
+\section{Domain context}
+In modern industrial environments, digital transformation has led to the generation of massive volumes of operational and production data. Steel manufacturing and related sectors rely heavily on KPIs to monitor production efficiency, equipment reliability, energy consumption, maintenance activities, and overall operational performance.
+
+Traditionally, KPI monitoring is performed through dashboards and BI tools. Although these systems provide structured visualization, users often navigate multiple interfaces and filters to reach the desired information, which is time-consuming for non-technical users.
+
+The emergence of conversational systems and LLMs offers more natural access patterns. However, direct generative answers on numeric KPIs raise concerns about hallucination, traceability, and SQL safety in enterprise settings.
+
+\section{Technologies and tools}
+\subsection{Frontend technologies}
+The frontend uses \textbf{React} with \textbf{Vite} as the build tool, \textbf{Tailwind CSS} for styling, and the \textbf{Fetch API} for JSON communication with the backend. Time-series and bar charts are rendered with \textbf{Chart.js} (via \texttt{react-chartjs-2}). Optional \textbf{speech-to-text} uses the browser Web Speech API where available.
+
+\subsection{Backend technologies}
+The backend is implemented in \textbf{Python} with \textbf{FastAPI}, exposing REST endpoints for chat, authentication, conversation history, and feedback. Session-based authentication uses Starlette \textbf{SessionMiddleware}. An agent/router layer orchestrates KPI processing versus general conversation.
+
+\subsection{Database technologies}
+\textbf{SQLite} supports rapid local prototyping (\texttt{sonasid.db} for KPI data, \texttt{rag.db} for conversation memory and feedback). \textbf{Azure SQL (T-SQL)} targets enterprise deployment with a translation layer bridging dialect differences.
+
+\subsection{Artificial intelligence and conversational logic}
+The system combines deterministic KPI pipelines with optional LLM-assisted paths (e.g.\ SQL generation guarded by validation). \textbf{RAG}-style memory stores conversations; negative user feedback can be retrieved to enrich context and reduce repeated mistakes.
+
+\subsection{Security and authentication}
+\textbf{Microsoft Entra ID (Azure AD)} SSO and \textbf{local} authentication coexist. \textbf{RBAC} restricts KPI access by authorized calendar years while leaving general chat unaffected.
+
+\section{Critical analysis}
+Pure NL2SQL with unconstrained LLMs trades flexibility for industrial risk. Pure dashboards trade reliability for accessibility. The hybrid architecture adopted in this project explicitly targets \textbf{repeatable SQL-first KPI answers}, conversational UX, and \textbf{governance} (RBAC, SSO, auditable notices on applied periods).
+
+% ========== CHAPTER 3 ==========
+\chapter{Methodology and Design}
+
+\section{Requirements analysis}
+\subsection{Functional requirements}
+\begin{itemize}[leftmargin=*]
+  \item Natural-language KPI queries with scalar, tabular, or time-series responses;
+  \item Temporal presets and explicit date ranges with transparent server-side application;
+  \item Conversational intent routing (KPI vs chat vs clarification vs comparison flows);
+  \item Conversation history, titles, and per-user isolation;
+  \item Dual authentication (Microsoft SSO and local);
+  \item User feedback (\textbf{thumbs up / thumbs down}) with optional automatic retry after negative feedback;
+  \item Account settings and profile fields where configured.
+\end{itemize}
+
+\subsection{Non-functional requirements}
+Performance suitable for interactive chat; maintainability through modular backend packages; security (sessions, RBAC, SQL guardrails); compatibility between SQLite and T-SQL; clear error and access-denied responses.
+
+\subsection{User profiles}
+Typical personas include operators, analysts, and managers with different authorized years and roles (see RBAC configuration).
+
+\subsection{UML and diagrams}
+\textit{Insert your class, activity, use case, sequence, and global architecture diagrams exported from Mermaid or Enterprise Architect as PDF/PNG figures, e.g.\ \texttt{\textbackslash includegraphics\{figs/usecase.pdf\}}.}
+
+\section{System architecture}
+The solution follows a \textbf{client--server} architecture: a React SPA, a FastAPI API layer, conversational routing and KPI pipelines, and \textbf{multiple persistence backends}: KPI warehouse (SQLite or Azure SQL), conversation store (SQLite \texttt{rag.db}), and file-based configuration for RBAC and local users.
+
+\subsection{Frontend layer}
+Responsible for authentication UI, chat workspace, period controls, quick actions, charts/tables, and account settings. Main components: \texttt{AuthGate.jsx}, \texttt{ChatWorkspace.jsx}, \texttt{DashboardKPI.jsx}.
+
+\subsection{Backend layer}
+Exposes REST endpoints; enforces sessions and RBAC; routes intents (\texttt{graph.py}); executes KPI logic (\texttt{pipeline.py}); parses periods and SQL helpers (\texttt{llm\_sql.py}); runs queries with dialect adaptation (\texttt{run\_query.py}); persists memory and feedback (\texttt{store.py}); applies RBAC (\texttt{access\_control.py}).
+
+\subsection{Data and persistence layer}
+KPI data in the configured analytical database; chat memory and \texttt{chat\_feedback} in \texttt{rag.db}; optional user profiles in JSON; RBAC mapping in \texttt{rbac.json}; local users via Excel or environment JSON as implemented.
+
+\subsection{Security layer}
+Microsoft Entra ID OAuth2, local login, signed OAuth \texttt{state} for SSO resilience, server-side session cookies, RBAC on KPI-like questions, scoped conversation identifiers per authenticated user.
+
+\section{Design choices and justification}
+\subsection{React for the frontend}
+Component model, ecosystem maturity, and suitability for highly interactive chat and dashboard UIs.
+
+\subsection{FastAPI for the backend}
+Performance for I/O-bound APIs, automatic OpenAPI documentation, and native integration with Python analytics and LLM libraries.
+
+\subsection{Hybrid conversational architecture}
+Separates general chat from deterministic KPI processing to limit hallucinated metrics while preserving natural dialogue.
+
+\subsection{SQLite and Azure SQL compatibility}
+Accelerates development; \texttt{run\_query.py} centralizes T-SQL translation (temporal grouping, table name mapping, \texttt{GROUP BY} quirks).
+
+\subsection{Security and RBAC design}
+Year-scoped access for KPI questions; SSO for enterprise identity; feedback and retry hooks for continuous improvement.
+
+% ========== CHAPTER 4 ==========
+\chapter{Implementation}
+
+\section{Development environment}
+\subsection{Backend environment}
+Python virtual environment, FastAPI/Uvicorn, Pydantic models, optional OpenRouter or local LLM providers, environment variables in \texttt{.env}, and \texttt{PYTHONPATH} pointing to the project root.
+
+\subsection{Frontend environment}
+Node.js LTS, React, Vite, Tailwind CSS, ESLint, Chart.js integration for KPI charts.
+
+\subsection{Database environment}
+SQLite for local KPI and RAG databases; Azure SQL with ODBC/pyodbc for production-style runs; table name mapping via environment variables.
+
+\subsection{Development and collaboration tools}
+Visual Studio Code, Git/GitHub, browser developer tools, Postman or curl for API checks, Mermaid for diagrams.
+
+\section{Main modules and components}
+\subsection{Frontend components}
+\textbf{AuthGate.jsx} --- Microsoft SSO and local login, session probe via \texttt{/auth/me}, cookie-aware fetch. \textbf{ChatWorkspace.jsx} --- central chat UI, period presets, quick actions, speech-to-text, history, feedback UI, call to \texttt{/feedback} and \texttt{/chat/retry}. \textbf{DashboardKPI.jsx} --- structured KPI views (scalars, tables, charts).
+
+\subsection{Backend components}
+\textbf{app.py} --- FastAPI application, routes for auth, chat, retry, conversations, feedback. \textbf{graph.py} --- conversational router (KPI, chat, clarify, compare). \textbf{pipeline.py} --- KPI rule engine, SQL execution orchestration, result formatting. \textbf{llm\_sql.py} --- temporal parsing, follow-up merging, SQL utilities. \textbf{run\_query.py} --- SQLite/Azure execution and dialect translation. \textbf{access\_control.py} --- RBAC enforcement on KPI-like questions. \textbf{store.py} --- conversation chunks, titles, \texttt{chat\_feedback} persistence and FTS.
+
+\section{Difficulties encountered and solutions}
+\subsection{Azure SQL compatibility}
+Implemented systematic SQLite-to-T-SQL rewrites for date grouping, table identifiers, and tested against Azure object names.
+
+\subsection{Conversational and KPI ambiguity}
+Router plus clarification prompts; period injection only for KPI-like utterances; \texttt{notice} field communicates applied ranges.
+
+\subsection{Follow-up context}
+History-backed merging for period-only replies (e.g.\ month after a KPI clarification).
+
+\subsection{Conversation isolation between users}
+Server-side scoping of \texttt{session\_id} with authenticated user prefix.
+
+\subsection{RBAC and access control}
+RBAC applied only when heuristics detect KPI intent, preserving conversational UX.
+
+\subsection{Speech-to-text reliability}
+Optional feature with graceful degradation when the Web Speech API is unavailable.
+
+\subsection{Frontend period synchronization}
+UI sends \texttt{period\_preset} and explicit ranges; backend is authoritative on whether to merge them into the question.
+
+\subsection{Microsoft SSO redirect and cookies}
+Entra ID allows \texttt{http://localhost} redirect URIs for Web apps (not \texttt{127.0.0.1}); signed OAuth \texttt{state} avoids BAD\_STATE when session cookies are dropped; SPA host normalized to \texttt{localhost} where needed so session cookies align with API origin.
+
+\section{User feedback mechanism}
+Users may rate each assistant answer with \textbf{thumbs up} (\texttt{rating=1}) or \textbf{thumbs down} (\texttt{rating=-1}) via \texttt{POST /feedback}. Negative feedback is stored with full-text search support; \texttt{POST /chat/retry} performs a regeneration pass with an explicit correction hint in conversation memory.
+
+% ========== CHAPTER 5 ==========
+\chapter{Results and Evaluation}
+
+\section{Tests and validation}
+\subsection{Functional validation}
+Manual and automated checks of authentication flows, chat endpoint contracts, and conversation listing scoped per user.
+
+\subsection{Conversational behavior validation}
+Scenarios for greetings, KPI queries, missing period prompts, follow-up messages, and quick actions (change granularity, shift year).
+
+\subsection{KPI and graphical visualization testing}
+Validation of scalar JSON, category/value tables, and \texttt{\{period, value\}} series rendered as charts.
+
+\subsection{RBAC and security testing}
+Attempts to query unauthorized years must return access denied without blocking general chat.
+
+\subsection{Azure SQL compatibility testing}
+Regression runs of translated SQL against Azure objects and drivers.
+
+\subsection{Speech-to-text validation}
+Optional browser-dependent checks.
+
+\section{Discussion}
+\subsection{Solution analysis}
+The system meets the objective of combining conversational access with deterministic KPI computation for industrial use. The hybrid pipeline reduces uncontrolled generative risk while preserving UX.
+
+\subsection{Comparison with existing approaches}
+Compared with traditional BI dashboards, the assistant improves accessibility; compared with LLM-only chat, it improves numeric reliability through SQL-first processing and RBAC.
+
+\subsection{User feedback (thumbs up / down)}
+Binary feedback creates an auditable corpus for quality improvement and feeds retrieval of past negative ratings into contextualization to avoid repeating similar mistakes.
+
+\subsection{Limitations and challenges}
+Binary feedback lacks structured error categories; LLM fallback paths require ongoing guardrail testing; SSO and cookie policies vary by browser; maintenance of KPI rules grows with schema evolution.
+
+% ========== CHAPTER 6 ==========
+\chapter{Conclusions and Future Work}
+
+\section{Conclusions}
+This graduation project delivered a web-based conversational assistant for industrial KPI analysis at Sonasid, combining a React frontend, a FastAPI backend, deterministic KPI pipelines, optional LLM assistance, RBAC, dual authentication, and SQLite/Azure SQL portability. The outcome demonstrates that conversational interfaces can coexist with industrial-grade analytical rigor when architecture, security, and SQL governance are treated as first-class concerns.
+
+\section{Future work}
+\begin{itemize}[leftmargin=*]
+  \item Richer feedback taxonomy (categories, free-text comments) and analytics dashboards on satisfaction trends;
+  \item Expanded KPI catalog and automated regression suite for SQL outputs;
+  \item Hardened production deployment (HTTPS, secret management, centralized logging and metrics);
+  \item Optional multilingual support and mobile-responsive refinements;
+  \item Deeper integration with corporate identity providers and audit trails for regulatory contexts.
+\end{itemize}
+
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+\bibitem{ref_bi} Few, S.\ \emph{Information Dashboard Design}. Analytics Press, 2006.
+\bibitem{ref_llm} OpenAI.\ Documentation and best practices for LLM-based applications, 2024.
+\bibitem{ref_fastapi} Ramírez, S.\ \emph{FastAPI framework documentation}, \url{https://fastapi.tiangolo.com}.
+\bibitem{ref_react} Meta.\ \emph{React documentation}, \url{https://react.dev}.
+\bibitem{ref_azure} Microsoft.\ \emph{Azure SQL Database documentation}, \url{https://learn.microsoft.com/azure/sql-database/}.
+\end{thebibliography}
+
+\end{document}
