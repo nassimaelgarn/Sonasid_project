@@ -99,6 +99,15 @@ def extract_numeric_signals(data: Dict[str, Any]) -> List[float]:
     r = data.get("result")
     if isinstance(r, (int, float)):
         out.append(float(r))
+    if isinstance(r, list):
+        for row in r:
+            if not isinstance(row, dict):
+                continue
+            for k, v in row.items():
+                if k in {"_note", "qualite"}:
+                    continue
+                if isinstance(v, (int, float)):
+                    out.append(float(v))
     # De-duplicate and keep finite only
     clean: List[float] = []
     for v in out:
@@ -151,6 +160,86 @@ def deterministic_kpi_analyse_from_dict(data: Dict[str, Any]) -> str:
         return ""
 
 
+def _sonasid_dashboard_summary(data: Dict[str, Any]) -> Optional[str]:
+    rows = data.get("result")
+    if not isinstance(rows, list):
+        return None
+    summary = [
+        r
+        for r in rows
+        if isinstance(r, dict)
+        and "annee" in r
+        and "arrivages" in r
+        and "qualite" not in r
+        and "mois" not in r
+    ]
+    if not summary:
+        return None
+    lines: List[str] = []
+    qref = data.get("question")
+    if isinstance(qref, str) and qref.strip():
+        lines.append(f"**Contexte :** {qref.strip()}")
+    for row in summary:
+        year = row.get("annee")
+        lines.append(f"**Année {year}**")
+        labels = [
+            ("navires_actifs", "Navires actifs"),
+            ("arrivages", "Arrivages"),
+            ("navires_distincts", "Navires distincts accostés"),
+            ("tonnage_importe", "Tonnage importé"),
+            ("tonnage_transfere", "Tonnage transféré"),
+        ]
+        for key, label in labels:
+            v = row.get(key)
+            if isinstance(v, (int, float)):
+                suffix = " t" if "tonnage" in key else ""
+                lines.append(f"- **{label} :** {_fmt_num(float(v))}{suffix}")
+        qual_rows = [
+            r
+            for r in rows
+            if isinstance(r, dict)
+            and r.get("annee") == year
+            and isinstance(r.get("qualite"), str)
+        ]
+        if qual_rows:
+            top = sorted(
+                qual_rows,
+                key=lambda x: float(x.get("tonnage_commande") or x.get("arrivages") or 0),
+                reverse=True,
+            )[:3]
+            parts = []
+            for q in top:
+                lib = q.get("qualite") or "—"
+                n = q.get("arrivages")
+                t = q.get("tonnage_commande")
+                chunk = lib
+                if isinstance(n, (int, float)):
+                    chunk += f" ({_fmt_num(float(n))} arr."
+                    if isinstance(t, (int, float)):
+                        chunk += f", {_fmt_num(float(t))} t"
+                    chunk += ")"
+                parts.append(chunk)
+            if parts:
+                lines.append(f"- **Qualités dominantes :** {', '.join(parts)}.")
+        mois_rows = [
+            r
+            for r in rows
+            if isinstance(r, dict) and r.get("annee") == year and isinstance(r.get("mois"), str)
+        ]
+        if mois_rows:
+            vals = [float(r.get("arrivages") or 0) for r in mois_rows]
+            if vals:
+                lines.append(
+                    f"- **Activité mensuelle :** entre {_fmt_num(min(vals))} et {_fmt_num(max(vals))} "
+                    f"arrivages/mois ({len(mois_rows)} mois couverts)."
+                )
+    lines.append(
+        "- **Lecture :** les volumes et la répartition par qualité permettent d’identifier les "
+        "périodes et produits les plus actifs sur le port."
+    )
+    return "**Analyse**\n" + "\n".join(lines)
+
+
 def deterministic_kpi_analyse_text(body: str) -> str:
     """
     Retourne un texte non vide en français si le JSON est exploitable, sinon ''.
@@ -160,6 +249,10 @@ def deterministic_kpi_analyse_text(body: str) -> str:
         return ""
     if not has_interpretable_data(data):
         return ""
+
+    brief = _sonasid_dashboard_summary(data)
+    if brief:
+        return brief
 
     lines: List[str] = []
 

@@ -26,6 +26,8 @@ def enrich_sonasid_response(
         return out
     if out.get("error"):
         return out
+    if str(out.get("source") or "").startswith("sonasid:brief"):
+        return out
 
     formula = guess_formula_hint(question)
     if formula and not out.get("formula"):

@@ -388,16 +388,29 @@ def process_question(question):
                 break
         if not text:
             fb = deterministic_kpi_analyse_text(body)
+            if not fb and isinstance(payload, dict):
+                from backend.llm.kpi_analyse_fallback import deterministic_kpi_analyse_from_dict
+
+                fb = deterministic_kpi_analyse_from_dict(payload)
             if fb:
+                note = ""
+                if last_err and re.search(r"\b(401|402|429|User not found|insufficient credits)\b", last_err, re.I):
+                    note = "\n\n_(Synthèse automatique — le modèle cloud est indisponible ; basculez sur **Flash** pour une analyse IA.)_"
+                else:
+                    note = "\n\n_(Synthèse automatique.)_"
                 return {
                     "question": q_in,
-                    "message": fb
-                    + "\n\n_(Synthèse automatique — le LLM n’a pas répondu ; vérifie `OPENROUTER_API_KEY` ou essaie le modèle Flash.)_",
+                    "message": fb + note,
                     "source": "pipeline:analyse+fallback",
                 }
-            msg = "Analyse indisponible (réponse vide du modèle)."
-            if last_err:
-                msg = f"Analyse indisponible : {last_err}"
+            msg = "Je n’ai pas pu produire d’analyse à partir de ces données."
+            if last_err and re.search(r"\b(401|402|User not found)\b", last_err, re.I):
+                msg = (
+                    "Le modèle sélectionné n’est pas accessible avec la clé API actuelle.\n"
+                    "Choisis le modèle **Flash** dans le panneau de gauche, ou relance l’analyse."
+                )
+            elif last_err:
+                msg = f"Analyse indisponible pour le moment.\n\nDétail technique : {last_err}"
             return {"question": q_in, "message": msg, "source": "pipeline:analyse:error"}
         # Reject generic answers that don't cite any number from data.
         if not is_analysis_text_grounded(text, payload):

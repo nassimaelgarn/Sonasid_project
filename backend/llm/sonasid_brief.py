@@ -119,7 +119,7 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
     lines: List[str] = [
         f"**Résumé port & arrivages — {', '.join(str(y) for y in years)}**",
         "",
-        "Synthèse automatique des principaux indicateurs (formules officielles POC).",
+        "Synthèse des indicateurs clés port & arrivages.",
         "",
     ]
     all_rows: List[Dict[str, Any]] = []

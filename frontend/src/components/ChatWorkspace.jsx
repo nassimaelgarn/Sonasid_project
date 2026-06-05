@@ -7,7 +7,7 @@ import {
   SONASID_WELCOME_HINT,
   buildSonasidWelcomeText,
 } from '../lib/sonasidCopy'
-import { SonasidBrandLogo, SteelPlantBackground } from '../lib/sonasidTheme'
+import { ChatMarkdown } from '../lib/chatMarkdown'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -3049,7 +3049,7 @@ export default function ChatWorkspace() {
                             {m.role !== 'user' && m?.meta?.raw && extractSqlPayload(m.meta.raw) ? (
                               (() => {
                                 const payload = extractSqlPayload(m.meta.raw)
-                                if (!payload) return <div className="whitespace-pre-wrap">{m.content}</div>
+                                if (!payload) return <ChatMarkdown content={m.content} />
                                 const err = m?.meta?.raw?.error
                                 return (
                                   <div>
@@ -3138,7 +3138,7 @@ export default function ChatWorkspace() {
                                 )
                               })()
                             ) : (
-                    <div className="whitespace-pre-wrap">{m.content}</div>
+                    <ChatMarkdown content={m.content} />
                             )}
                           </>
                         )}
