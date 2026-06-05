@@ -466,6 +466,74 @@ def is_period_only_followup_text(text: str) -> bool:
     return False
 
 
+def is_same_kpi_followup_text(text: str) -> bool:
+    """Relance du type « même chose pour 2026 », « pareil en 2026 », « idem »."""
+    s = re.sub(r"\s+", " ", (text or "").strip().lower())
+    if not s:
+        return False
+    if is_period_only_followup_text(s):
+        return False
+    if re.search(r"\b(meme|même|pareil|idem|identique|aussi)\b", s):
+        if re.search(r"\b20\d{2}\b", s) or re.search(r"\b(pour|en|sur)\s+\d{4}", s):
+            return True
+        if re.search(r"\b(chose|question|analyse|demande|kpi|resume|résumé|recap)\b", s):
+            return True
+    if re.match(r"^(?:et|ou)\s+(?:pour|en|sur)\s+\d{4}", s):
+        return True
+    return False
+
+
+def _last_kpi_user_question(prior_messages: Optional[List[Dict[str, Any]]]) -> str:
+    from backend.security.access_control import looks_like_kpi_question
+
+    msgs = prior_messages or []
+    for i in range(len(msgs) - 1, -1, -1):
+        if str(msgs[i].get("role", "")).strip() != "user":
+            continue
+        prev_u = str(msgs[i].get("content") or "").strip()
+        if not prev_u:
+            continue
+        if looks_like_kpi_question(prev_u):
+            return prev_u
+        if len(prev_u) > 12 and not is_pure_greeting_short(prev_u):
+            return prev_u
+    return ""
+
+
+def is_pure_greeting_short(text: str) -> bool:
+    t = re.sub(r"\s+", " ", (text or "").strip().lower())
+    return bool(re.match(r"^(bonjour|salut|hello|coucou|bonsoir|merci|ok)\b", t))
+
+
+def merge_kpi_followup_from_history(
+    question: str,
+    prior_messages: Optional[List[Dict[str, Any]]],
+) -> str:
+    """
+    « Même chose pour 2026 » → reprend la dernière question KPI et change la période.
+    """
+    q = (question or "").strip()
+    if not q or not is_same_kpi_followup_text(q):
+        return q
+    prev_u = _last_kpi_user_question(prior_messages)
+    if not prev_u:
+        return q
+    ql = q.lower()
+    m_year = re.search(r"\b(20\d{2})\b", ql)
+    if m_year:
+        new_y = m_year.group(1)
+        if re.search(r"\b20\d{2}\b", prev_u):
+            return re.sub(r"\b20\d{2}\b", new_y, prev_u)
+        return f"{prev_u} {new_y}".strip()
+    m_month = re.search(r"\b(20\d{2}-\d{2})\b", ql)
+    if m_month:
+        new_m = m_month.group(1)
+        if re.search(r"\b20\d{2}-\d{2}\b", prev_u):
+            return re.sub(r"\b20\d{2}-\d{2}\b", new_m, prev_u, count=1)
+        return f"{prev_u} {new_m}".strip()
+    return f"{prev_u} {q}".strip()
+
+
 def merge_need_period_followup_from_history(
     question: str,
     prior_messages: Optional[List[Dict[str, Any]]],
