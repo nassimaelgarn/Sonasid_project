@@ -8,6 +8,7 @@ import {
   buildSonasidWelcomeText,
 } from '../lib/sonasidCopy'
 import { ChatMarkdown } from '../lib/chatMarkdown'
+import { SonasidBrandLogo, SteelPlantBackground } from '../lib/sonasidTheme'
 import {
   Chart as ChartJS,
   CategoryScale,
