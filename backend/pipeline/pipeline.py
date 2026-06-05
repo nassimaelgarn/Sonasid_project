@@ -1056,15 +1056,21 @@ def process_question(question):
             if "40615" in err_text or "not allowed to access" in low or "firewall" in low:
                 m_ip = re.search(r"IP address '([\d.]+)'", err_text)
                 ip_hint = m_ip.group(1) if m_ip else "votre IP publique actuelle"
+                srv = os.getenv("AZURE_SQL_SERVER", "sql-son-prd.database.windows.net")
+                out["error"] = "DB_FIREWALL"
                 out["message"] = (
-                    "Connexion **Azure SQL** refusée (pare-feu).\n\n"
-                    f"L’adresse **{ip_hint}** n’est pas autorisée sur le serveur "
-                    f"`{os.getenv('AZURE_SQL_SERVER', 'sql-son-prd.database.windows.net')}`.\n\n"
-                    "**Correction (admin Azure) :**\n"
-                    "1. Portail Azure → SQL Server `sql-son-prd` → **Mise en réseau**\n"
-                    f"2. Ajouter une règle pare-feu pour **{ip_hint}**\n"
-                    "3. Attendre ~5 minutes, puis réessayer\n\n"
-                    "La requête T-SQL générée est correcte ; seule la connexion est bloquée."
+                    "**Connexion à la base de données impossible**\n\n"
+                    f"Le serveur Azure SQL `{srv}` refuse la connexion depuis l’adresse **{ip_hint}** "
+                    "(pare-feu non autorisé).\n\n"
+                    "**Ce que cela signifie :**\n"
+                    "- La requête a bien été générée (logique métier OK).\n"
+                    "- Seule l’exécution sur Azure SQL est bloquée.\n\n"
+                    "**Solutions :**\n"
+                    "1. **POC prod** — utilise l’application déployée sur la VM "
+                    "(`sonasid-alexsys.westeurope.cloudapp.azure.com:5175`) : le backend y est déjà autorisé.\n"
+                    f"2. **Test local** — un admin Azure doit ajouter **{ip_hint}** dans "
+                    f"Portail Azure → SQL Server `sql-son-prd` → Mise en réseau → règle pare-feu.\n"
+                    "3. Attendre ~5 minutes après l’ajout, puis réessayer."
                 )
         else:
             out["sql"] = sql

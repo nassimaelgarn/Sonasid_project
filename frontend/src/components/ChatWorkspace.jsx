@@ -3051,21 +3051,38 @@ export default function ChatWorkspace() {
                               (() => {
                                 const payload = extractSqlPayload(m.meta.raw)
                                 if (!payload) return <ChatMarkdown content={m.content} />
-                                const err = m?.meta?.raw?.error
+                                const raw = m.meta.raw
+                                const err = raw?.error
+                                const friendly =
+                                  typeof raw?.message === 'string' && raw.message.trim()
+                                    ? raw.message.trim()
+                                    : typeof m.content === 'string' && m.content.trim()
+                                      ? m.content.trim()
+                                      : ''
+                                const isDbError =
+                                  String(raw?.source || '') === 'pipeline:db_error' ||
+                                  err === 'DB_FIREWALL'
                                 return (
                                   <div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                                        {payload.kind === 'catalog'
-                                          ? `Requêtes T‑SQL (Azure) — tous les KPIs (${payload.blocks.length})`
-                                          : `Requête${payload.kind === 'multi' ? 's' : ''} SQL`}
-                                      </div>
-                                    </div>
-                                    {err ? (
+                                    {friendly ? (
+                                      <ChatMarkdown content={friendly} />
+                                    ) : null}
+                                    {err && !friendly ? (
                                       <div className="mt-2 rounded-xl border border-rose-200/70 bg-rose-50/70 px-3 py-2 text-xs text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/25 dark:text-rose-200 whitespace-pre-wrap">
                                         {String(err)}
                                       </div>
                                     ) : null}
+                                    <details
+                                      className={clsx('mt-3', isDbError && 'opacity-90')}
+                                      open={!isDbError}
+                                    >
+                                      <summary className="cursor-pointer text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                                        {isDbError
+                                          ? 'Requête T-SQL générée (non exécutée — connexion bloquée)'
+                                          : payload.kind === 'catalog'
+                                            ? `Requêtes T‑SQL (Azure) — tous les KPIs (${payload.blocks.length})`
+                                            : `Requête${payload.kind === 'multi' ? 's' : ''} SQL`}
+                                      </summary>
                                     <div className={clsx('mt-2', payload.kind === 'catalog' ? 'space-y-1.5' : 'space-y-2')}>
                                       {payload.blocks.map((b) => {
                                         const key = `${idx}:${b.label}`
@@ -3135,6 +3152,7 @@ export default function ChatWorkspace() {
                                         )
                                       })}
                                     </div>
+                                    </details>
                                   </div>
                                 )
                               })()
