@@ -336,6 +336,16 @@ def process_question(question):
     # session_id is handled by api/app.py once wired.
 
     q_in = (question or "").strip()
+    _open_expanded = False
+    _expand_notice: Optional[str] = None
+    try:
+        from backend.llm.sonasid_sql import expand_sonasid_open_question
+
+        _before_expand = q_in
+        q_in, _expand_notice = expand_sonasid_open_question(q_in)
+        _open_expanded = q_in.strip() != _before_expand.strip()
+    except Exception:
+        pass
     ql_in = q_in.lower()
     # NOTE: We intentionally do NOT short-circuit greetings here.
     # General conversation should be handled by the agent/LLM to stay natural.
@@ -429,7 +439,7 @@ def process_question(question):
         return {"question": q_in, "message": text, "source": "pipeline:analyse"}
 
     kpi_rewrite_box: Dict[str, Any] = {}
-    sonasid_period_notice: Optional[str] = None
+    sonasid_period_notice: Optional[str] = _expand_notice
 
     def _user_requests_inline_analysis(text: str) -> bool:
         t = (text or "").strip().lower()
@@ -652,6 +662,7 @@ def process_question(question):
         isinstance(raw, str)
         and extract_sql(raw).strip().upper() == "SELECT 1"
         and is_kpi_rewrite_enabled()
+        and not _open_expanded
     ):
         rag_ctx = ""
         try:
@@ -1321,14 +1332,50 @@ def process_question(question):
             r"\b(quels?|top|plus|classement|ranking|principal)\b", ql
         ):
             pass
+        elif any(x in ql for x in ["par mois", "mensuel", "chaque mois"]) and isinstance(
+            result, list
+        ) and result:
+            formatted = _format_rows(ql, result)
+            out: Dict[str, Any] = {
+                "question": question,
+                "result": formatted,
+                "source": "sql:sonasid",
+            }
+            try:
+                from backend.llm.sonasid_sql import _is_sonasid_trend_question, sonasid_trend_verdict
+
+                if _is_sonasid_trend_question(q_in) and isinstance(formatted, list):
+                    verdict = sonasid_trend_verdict(q_in, formatted)
+                    if verdict:
+                        out["message"] = verdict
+            except Exception:
+                pass
+            return attach_rewrite(out)
         elif "par mois" not in ql and "par semaine" not in ql and "par jour" not in ql and "tonnage" not in ql:
             n = int(value) if value == int(value) else value
+            msg = f"Nombre d'arrivages : {n}"
+            if (
+                isinstance(result, list)
+                and result
+                and isinstance(result[0], (list, tuple))
+                and len(result[0]) >= 2
+                and re.search(r"\btonnage_total\b", (sql or ""), re.I)
+            ):
+                try:
+                    ton = float(result[0][1] or 0)
+                    from backend.llm.llm_sql import _extract_year_month_range
+
+                    _, month, _, _ = _extract_year_month_range(question)
+                    label = month or "Période demandée"
+                    msg = f"**{label}** : {n} arrivages · {round(ton, 2)} t importées."
+                except (TypeError, ValueError, IndexError):
+                    pass
             return attach_rewrite(
                 {
                     "question": question,
                     "nombre_arrivages": n,
                     "result": n,
-                    "message": f"Nombre d'arrivages : {n}",
+                    "message": msg,
                     "source": "sql:sonasid",
                 }
             )

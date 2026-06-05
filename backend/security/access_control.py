@@ -95,6 +95,15 @@ def looks_like_kpi_question(text: str) -> bool:
     ]
     if any(k in t for k in keywords):
         return True
+    if re.search(r"\b(arrivé|arrive)\b", t) and re.search(
+        r"\b(janvier|fevrier|février|mars|avril|mai|juin|juillet|aout|août|septembre|octobre|novembre|decembre|décembre|20\d{2}|port|arrivage)\b",
+        t,
+    ):
+        return True
+    if re.search(r"\b(augment|diminu|évolution|evolution|tendance|hausse|baisse)\b", t) and re.search(
+        r"\barrivages?\b", t
+    ):
+        return True
     if "par mois" in t or "par semaine" in t or "par jour" in t or "par an" in t or "par année" in t:
         return True
     if re.search(r"\btop\s*\d+\b", t):

@@ -832,8 +832,11 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
         allowed_years_tuple = None
 
     try:
-        from backend.llm.sonasid_sql import augment_sonasid_question_period
+        from backend.llm.sonasid_sql import augment_sonasid_question_period, expand_sonasid_open_question
 
+        q_eff, expand_notice = expand_sonasid_open_question(q_eff)
+        if expand_notice:
+            notice_ui = expand_notice
         q_eff, sonasid_auto = augment_sonasid_question_period(
             q_eff, allowed_years=allowed_years_tuple
         )

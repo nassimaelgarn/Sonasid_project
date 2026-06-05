@@ -120,6 +120,22 @@ def main() -> int:
             ok = yrs == [datetime.now().year]
         ok_all &= check(q[:45], ok, str(yrs))
 
+    print("\n=== 6. Questions ouvertes → SQL / expansion ===")
+    from backend.llm.sonasid_sql import expand_sonasid_open_question
+    from backend.llm.conversational import should_use_kpi_pipeline
+
+    open_cases = [
+        ("les arrivages ont augmenté ou pas ?", "par mois", True),
+        ("nombre d'arrivages par mois l'année dernière", "2025", True),
+        ("qu'est-ce qui est arrivé en janvier 2025 ?", "2025-01", True),
+    ]
+    for q, needle, kpi in open_cases:
+        expanded, _ = expand_sonasid_open_question(q)
+        raw = generate_sql(expanded) or try_sonasid_kpi_sql(expanded)
+        sql = extract_sql(raw) if isinstance(raw, str) else str(raw or "")
+        ok = should_use_kpi_pipeline(q) == kpi and needle in (expanded + " " + sql)
+        ok_all &= check(q[:42], ok, expanded[:60])
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

@@ -90,11 +90,109 @@ def _tsql_where_range(field: str, question: str, *, allow_default_year: bool = T
             return (
                 f"WHERE {field} >= '{y:04d}-01-01' AND {field} < '{(y + 1):04d}-01-01'"
             )
+    if question_has_explicit_period(question):
+        try:
+            from backend.llm.sonasid_brief import _normalize_ql_for_period, _relative_period_years
+
+            rel = _relative_period_years(_normalize_ql_for_period(question))
+            if rel and len(rel) == 1:
+                y = rel[0]
+                return f"WHERE {field} >= '{y:04d}-01-01' AND {field} < '{(y + 1):04d}-01-01'"
+        except Exception:
+            pass
     if allow_default_year and _sonasid_auto_year_enabled():
         y = _default_calendar_year()
         return f"WHERE {field} >= '{y:04d}-01-01' AND {field} < '{(y + 1):04d}-01-01'"
     return ""
 
+
+def expand_sonasid_open_question(question: str) -> Tuple[str, Optional[str]]:
+    """
+    Reformulations déterministes pour questions ouvertes (tendance, mois, période relative).
+    """
+    q = normalize_kpi_question(question)
+    ql = q.lower()
+    notice: Optional[str] = None
+
+    try:
+        from backend.llm.sonasid_brief import _normalize_ql_for_period, _relative_period_years, _resolve_brief_years
+    except Exception:
+        return q, None
+
+    orig_ql = _normalize_ql_for_period(question)
+    rel = _relative_period_years(orig_ql)
+    if rel and len(rel) == 1 and not re.search(r"\b20\d{2}\b", q):
+        y = rel[0]
+        q = f"{q} {y}"
+        ql = q.lower()
+        if re.search(r"dernier|dernière|last year", orig_ql, re.I):
+            notice = f"Période interprétée : {y} (année dernière)."
+        elif re.search(r"cette année|this year|année en cours", orig_ql, re.I):
+            notice = f"Période interprétée : {y} (cette année)."
+        else:
+            notice = f"Période interprétée : {y}."
+
+    if re.search(
+        r"(augment|diminu|évolution|evolution|tendance|hausse|baisse|progress|plus\s+qu|moins\s+qu)",
+        orig_ql,
+    ) and re.search(r"\barrivages?\b", orig_ql):
+        if not re.search(r"\bpar mois\b", ql):
+            y = _resolve_brief_years(q)[0]
+            q = f"nombre d'arrivages par mois en {y}"
+            ql = q.lower()
+            extra = f"Série mensuelle {y} pour juger la tendance."
+            notice = f"{notice} {extra}".strip() if notice else extra
+
+    if re.search(r"\b(qu['']est.ce qui|que s['']est.il|quoi s['']est.il)\b", orig_ql) or (
+        re.search(r"\b(arrivé|arrive)\b", orig_ql)
+        and re.search(
+            r"\b(janvier|fevrier|février|mars|avril|mai|juin|juillet|aout|août|septembre|octobre|novembre|decembre|décembre|20\d{2})\b",
+            orig_ql,
+        )
+    ):
+        _, month, _, _ = _extract_year_month_range(q)
+        if month:
+            q = f"nombre d'arrivages en {month}"
+            ql = q.lower()
+            extra = f"Activité portuaire sur {month}."
+            notice = f"{notice} {extra}".strip() if notice else extra
+
+    return q.strip(), notice
+
+
+def _is_sonasid_trend_question(text: str) -> bool:
+    t = (text or "").lower()
+    return bool(
+        re.search(r"(augment|diminu|évolution|evolution|tendance|hausse|baisse)", t)
+        and re.search(r"\barrivages?\b", t)
+    )
+
+
+def sonasid_trend_verdict(original_q: str, rows: List[Dict[str, Any]]) -> str:
+    vals: List[float] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        v = row.get("nombre_arrivages")
+        if v is None:
+            v = row.get("value")
+        if isinstance(v, (int, float)):
+            vals.append(float(v))
+    if len(vals) < 2:
+        return ""
+    first, last = vals[0], vals[-1]
+    delta = last - first
+    if delta > 0:
+        return (
+            f"**Tendance :** oui, les arrivages **augmentent** sur la période "
+            f"({int(first) if first == int(first) else first} → {int(last) if last == int(last) else last}, +{int(delta) if delta == int(delta) else delta})."
+        )
+    if delta < 0:
+        return (
+            f"**Tendance :** non, les arrivages **diminuent** "
+            f"({int(first) if first == int(first) else first} → {int(last) if last == int(last) else last}, {int(delta) if delta == int(delta) else delta})."
+        )
+    return f"**Tendance :** stable sur la période ({int(first) if first == int(first) else first} arrivages)."
 
 def _optional_arrivage_period_clause(question: str, ql: str, alias: str = "a") -> str:
     """Filtre temporel optionnel (formules officielles sans date ; filtre si période dans la question)."""
@@ -752,16 +850,25 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
         where = _combine_where(fourn, period)
         return f"SELECT COUNT(*) AS nombre_arrivages FROM {T_ARRIVAGE} {where};"
 
-    # --- Arrivages avec année explicite (total, pas classement fournisseur) ---
+    # --- Arrivages avec année ou mois explicite (total, pas classement fournisseur) ---
     if (
         re.search(r"\barrivages?\b", ql)
-        and re.search(r"\b20\d{2}\b", ql)
+        and (re.search(r"\b20\d{2}\b", ql) or _extract_year_month_range(q)[1])
         and not re.search(r"\bfournisseurs?\b", ql)
     ):
         if not re.search(r"\b(par mois|mensuel|chaque mois|mois par mois)\b", ql):
             if not re.search(r"\btonnage\b", ql):
                 df = _pick_arrivage_date_field(ql)
                 w = _tsql_where_range(df, q, allow_default_year=False)
+                _, month, _, _ = _extract_year_month_range(q)
+                if month or re.search(
+                    r"\b(qu['']est|arrivé|arrive|passé|passe|activité|activite)\b", ql
+                ):
+                    return (
+                        f"SELECT COUNT(*) AS nombre_arrivages, "
+                        f"SUM(COALESCE(Arrivage_TonnageTotal, 0)) AS tonnage_total "
+                        f"FROM {T_ARRIVAGE} {w};"
+                    )
                 return f"SELECT COUNT(*) AS nombre_arrivages FROM {T_ARRIVAGE} {w};"
 
     # --- Tonnage importé global (Arrivage_TonnageTotal) ---

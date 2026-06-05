@@ -58,6 +58,15 @@ def should_use_kpi_pipeline(text: str) -> bool:
         r"\b(sql|requête|requete)\b", tl
     ):
         return True
+    if re.search(r"\b(arrivé|arrive)\b", tl) and re.search(
+        r"\b(janvier|fevrier|février|mars|avril|mai|juin|juillet|aout|août|septembre|octobre|novembre|decembre|décembre|20\d{2})\b",
+        tl,
+    ):
+        return True
+    if re.search(r"\b(augment|diminu|évolution|evolution|tendance|hausse|baisse)\b", tl) and re.search(
+        r"\barrivages?\b", tl
+    ):
+        return True
     return False
 
 
