@@ -119,6 +119,60 @@ def _period_label_from_question(question: str) -> str:
     return "Période demandée"
 
 
+def _build_monthly_series_message(
+    question: str,
+    rows: List[Dict[str, Any]],
+    *,
+    metric_label: str,
+) -> str:
+    periods: List[str] = []
+    vals: List[float] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        p = row.get("period") or row.get("periode") or row.get("mois")
+        v = row.get("value")
+        if v is None:
+            v = row.get("nombre_arrivages") or row.get("nombre_navires_actifs") or row.get("tonnage_importe")
+        if p is None or not isinstance(v, (int, float)):
+            continue
+        periods.append(str(p))
+        vals.append(float(v))
+    if not vals:
+        return f"**{metric_label} par mois** — aucune donnée sur la période."
+
+    y_match = re.search(r"\b(20\d{2})\b", question or "")
+    year = y_match.group(1) if y_match else ""
+    title = f"**{metric_label} par mois"
+    if year:
+        title += f" en {year}"
+    title += "**"
+
+    def _fmt(v: float) -> str:
+        return str(int(v)) if v == int(v) else f"{v:.2f}"
+
+    span = ""
+    if periods:
+        span = f"{periods[0]} → {periods[-1]}"
+        if year and (not periods[0].startswith(f"{year}-01") or not periods[-1].startswith(f"{year}-12")):
+            span = f"données {span}"
+
+    parts = [
+        title,
+        f"- **Périodes :** {len(vals)}" + (f" ({span})" if span else ""),
+        f"- **Min / max :** {_fmt(min(vals))} / {_fmt(max(vals))}",
+        f"- **Total sur la série :** {_fmt(sum(vals))}",
+    ]
+    if len(vals) >= 2:
+        delta = vals[-1] - vals[0]
+        sign = "+" if delta > 0 else ""
+        parts.append(
+            f"- **Tendance :** {sign}{_fmt(delta)} "
+            f"({_fmt(vals[0])} → {_fmt(vals[-1])}, {periods[0]} à {periods[-1]})"
+        )
+    return "\n".join(parts)
+
+
 def _format_rows(question_lower: str, rows):
     """
     Format SQLite rows for display:
@@ -1148,7 +1202,32 @@ def process_question(question):
         and len(result[0]) >= 2
         and not _is_single_aggregate_row(result, sql)
     ):
-        return attach_rewrite({"question": question, "result": _format_rows(ql, result)})
+        formatted = _format_rows(ql, result)
+        series_out: Dict[str, Any] = {
+            "question": question,
+            "result": formatted,
+            "source": "sql:sonasid",
+        }
+        is_monthly = bool(
+            any(x in ql for x in ["par mois", "mensuel", "chaque mois"])
+            or re.search(r"\bperiode\b", (sql or ""), re.I)
+            or re.search(r"convert\s*\(\s*char\s*\(\s*7", (sql or ""), re.I)
+        )
+        if is_monthly and isinstance(formatted, list) and formatted:
+            if re.search(r"\bnavires?\b", ql):
+                label = "Navires actifs" if re.search(r"\bactifs?\b", ql) else "Navires"
+                series_out["message"] = _build_monthly_series_message(
+                    question, formatted, metric_label=label
+                )
+            elif re.search(r"\barrivages?\b", ql):
+                series_out["message"] = _build_monthly_series_message(
+                    question, formatted, metric_label="Arrivages"
+                )
+            elif re.search(r"\btonnage\b", ql):
+                series_out["message"] = _build_monthly_series_message(
+                    question, formatted, metric_label="Tonnage"
+                )
+        return attach_rewrite(series_out)
 
     if _is_single_aggregate_row(result, sql) and re.search(
         r"\bnombre_arrivages\b", (sql or ""), re.I
@@ -1340,16 +1419,21 @@ def process_question(question):
         elif any(x in ql for x in ["par mois", "mensuel", "chaque mois"]) and isinstance(
             result, list
         ) and result and isinstance(result[0], (list, tuple)) and len(result[0]) >= 2:
+            formatted = _format_rows(ql, result)
+            label = "Navires actifs" if re.search(r"\bactifs?\b", ql) else "Navires"
             out: Dict[str, Any] = {
                 "question": question,
-                "result": _format_rows(ql, result),
+                "result": formatted,
                 "source": "sql:sonasid",
+                "message": _build_monthly_series_message(
+                    question,
+                    formatted if isinstance(formatted, list) else [],
+                    metric_label=label,
+                ),
             }
             if re.search(r"\bactifs?\b", ql):
                 out["notice"] = (
-                    "Série mensuelle : navires actifs (référentiel) ayant au moins un arrivage "
-                    "ce mois-là. Le total « 69 » sans « par mois » est l’effectif actuel du référentiel, "
-                    "pas une série historique."
+                    "Comptage mensuel : navires actifs du référentiel ayant au moins un arrivage ce mois-là."
                 )
             return attach_rewrite(out)
         else:
@@ -1419,6 +1503,11 @@ def process_question(question):
                 "question": question,
                 "result": formatted,
                 "source": "sql:sonasid",
+                "message": _build_monthly_series_message(
+                    question,
+                    formatted if isinstance(formatted, list) else [],
+                    metric_label="Arrivages",
+                ),
             }
             try:
                 from backend.llm.sonasid_sql import _is_sonasid_trend_question, sonasid_trend_verdict
@@ -1426,7 +1515,7 @@ def process_question(question):
                 if _is_sonasid_trend_question(q_in) and isinstance(formatted, list):
                     verdict = sonasid_trend_verdict(q_in, formatted)
                     if verdict:
-                        out["message"] = verdict
+                        out["message"] = verdict + "\n\n" + str(out.get("message") or "")
             except Exception:
                 pass
             return attach_rewrite(out)

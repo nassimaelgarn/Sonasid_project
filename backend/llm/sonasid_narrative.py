@@ -93,8 +93,12 @@ def enrich_sonasid_response(
 
 def _should_append_auto_synth(out: Dict[str, Any]) -> bool:
     """Ne pas empiler la synthèse auto sur une réponse déjà lisible."""
-    if str(out.get("source") or "").startswith("sql:sonasid") and out.get("message"):
+    if out.get("message") and str(out.get("source") or "").startswith("sql:sonasid"):
         return False
+    rows = out.get("result")
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        if "period" in rows[0] or "periode" in rows[0]:
+            return False
     if out.get("nombre_arrivages") is not None and isinstance(out.get("result"), (int, float)):
         return False
     if str(out.get("source") or "").startswith("sonasid:brief"):
