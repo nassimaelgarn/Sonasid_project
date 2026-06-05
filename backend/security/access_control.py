@@ -32,6 +32,7 @@ def looks_like_kpi_question(text: str) -> bool:
     # KPI/metric keywords (aciérie + Sonasid port / arrivages)
     keywords = [
         "kpi",
+        "kip",
         "navire",
         "navires",
         "arrivage",
@@ -96,6 +97,11 @@ def looks_like_kpi_question(text: str) -> bool:
         return True
     if re.search(r"\btop\s*\d+\b", t):
         return True
+    if re.search(r"\b(résumé|resume|recap|récap|synthèse|synthese|analyse|analyser)\b", t):
+        if re.search(r"\b(kpi|kip|indicateurs?|arrivages?|tonnage|tous|ensemble)\b", t):
+            return True
+        if re.search(r"\b20\d{2}\b", t):
+            return True
     return False
 
 

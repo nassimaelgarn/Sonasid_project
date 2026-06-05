@@ -62,6 +62,8 @@ def normalize_kpi_question(question: str) -> str:
         (r"\bréquettes?\b", "requete"),
         (r"\bpar\s+joun[ée]e\b", "par jour"),
         (r"\bpar\s+journee\b", "par jour"),
+        (r"\bkip\b", "kpi"),
+        (r"\bkips\b", "kpi"),
         (r"\bpar\s+sem\b", "par semaine"),
         (r"\bpar\s+semiane\b", "par semaine"),
         (r"\bpar\s+moit\b", "par mois"),

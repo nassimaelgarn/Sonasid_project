@@ -42,6 +42,10 @@ def should_use_kpi_pipeline(text: str) -> bool:
     if looks_like_kpi_question(t):
         return True
     tl = t.lower()
+    if re.search(r"\b(résumé|resume|recap|récap|synthèse|synthese)\b", tl) and re.search(
+        r"\b(kpi|kip|indicateurs?|tous|ensemble|20\d{2})\b", tl
+    ):
+        return True
     if re.search(r"\b(sql|requête|requete|tsql|query)\b", tl) and re.search(
         r"\b(arrivage|navire|tonnage|kpi|fournisseur|transfert|commande)\b", tl
     ):
@@ -168,11 +172,18 @@ def conversational_reply(
             break
 
     if not text:
-        text = _greeting_message(actor_name)
-        if last_err:
+        if not is_pure_greeting(q):
+            text = (
+                "Je n'ai pas pu répondre via le chat pour l'instant. "
+                "Choisis le modèle **Flash** dans le panneau de gauche, ou reformule ta question."
+            )
+        else:
+            text = _greeting_message(actor_name)
+        if last_err and not is_pure_greeting(q):
+            pass  # pas de message technique sur une vraie question métier
+        elif last_err:
             text += (
-                "\n\n_(Le modèle cloud est momentanément indisponible ; "
-                "réessaie Flash ou vérifie OPENROUTER_API_KEY.)_"
+                "\n\n_(Modèle cloud indisponible — essaie **Flash**.)_"
             )
 
     text = _clamp_reply_length(text, max_sentences=3)

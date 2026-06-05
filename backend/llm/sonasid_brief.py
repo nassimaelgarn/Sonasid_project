@@ -72,7 +72,7 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
         return None
     ql = re.sub(r"\s+", " ", (question or "").lower()).strip()
 
-    if re.search(r"\b(kpi|indicateurs?)\b", ql) and re.search(
+    if re.search(r"\b(kpi|kip|indicateurs?)\b", ql) and re.search(
         r"\b(résumé|resume|recap|récap|synthèse|synthese|tableau de bord|donne|donne-moi|tous|ensemble|global|principaux?|l'ensemble)\b",
         ql,
     ):
