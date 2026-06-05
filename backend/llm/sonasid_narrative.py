@@ -76,7 +76,11 @@ def enrich_sonasid_response(
             extra.append(f"**Formule / logique :** {formula}")
         if sql and _user_wants_sql(question) and sql.strip() not in str(out.get("message")):
             extra.append(f"**Requête T-SQL :**\n```sql\n{sql.strip()}\n```")
-        if synth and synth not in str(out.get("message")):
+        if (
+            synth
+            and synth not in str(out.get("message"))
+            and _should_append_auto_synth(out)
+        ):
             extra.append(synth)
         if extra:
             out["message"] = str(out["message"]) + "\n\n" + "\n\n".join(extra)
@@ -85,6 +89,17 @@ def enrich_sonasid_response(
         out.pop("formula", None)
 
     return out
+
+
+def _should_append_auto_synth(out: Dict[str, Any]) -> bool:
+    """Ne pas empiler la synthèse auto sur une réponse déjà lisible."""
+    if str(out.get("source") or "").startswith("sql:sonasid") and out.get("message"):
+        return False
+    if out.get("nombre_arrivages") is not None and isinstance(out.get("result"), (int, float)):
+        return False
+    if str(out.get("source") or "").startswith("sonasid:brief"):
+        return False
+    return True
 
 
 def _user_wants_sql(question: str) -> bool:

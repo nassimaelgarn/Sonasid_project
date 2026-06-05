@@ -323,14 +323,24 @@ def deterministic_kpi_analyse_text(body: str) -> str:
     if found:
         head = "**Synthèse (automatique)**\n"
         tail = "\n".join(frag)
-        tail += (
-            "\n- **Note :** ce bloc ne contient que des totaux agrégés (pas de détail par période). "
-            "Pour une lecture mois par mois, demande explicitement « par mois » ou regarde la courbe si elle est affichée."
-        )
+        if not (data.get("nombre_arrivages") is not None and str(data.get("source") or "").startswith("sql:")):
+            tail += (
+                "\n- **Note :** ce bloc ne contient que des totaux agrégés (pas de détail par période). "
+                "Pour une lecture mois par mois, demande explicitement « par mois » ou regarde la courbe si elle est affichée."
+            )
         return head + tail
 
     if isinstance(data.get("result"), list) and data["result"]:
-        n = len(data["result"])
+        rows = data["result"]
+        if len(rows) == 1 and isinstance(rows[0], dict):
+            row = rows[0]
+            if isinstance(row.get("nombre_arrivages"), (int, float)):
+                ton = row.get("tonnage_total")
+                line = f"- **Arrivages :** {_fmt_num(float(row['nombre_arrivages']))}"
+                if isinstance(ton, (int, float)):
+                    line += f" · **Tonnage :** {_fmt_num(float(ton))} t"
+                return f"**Synthèse (automatique)**\n{line}"
+        n = len(rows)
         lines.append(f"- **Enregistrements :** {n} ligne(s) (structure non standard pour un résumé auto).")
         return "**Synthèse (automatique)**\n" + "\n".join(lines)
 

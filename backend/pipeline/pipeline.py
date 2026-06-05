@@ -71,6 +71,54 @@ def _kwh_to_mwh(kwh: float) -> float:
     return x / 1000.0
 
 
+def _is_single_aggregate_row(result, sql: str) -> bool:
+    """Une seule ligne COUNT/SUM sans GROUP BY — pas une série temporelle."""
+    if not result or len(result) != 1:
+        return False
+    row = result[0]
+    if not isinstance(row, (list, tuple)):
+        return False
+    sql_low = (sql or "").lower()
+    if re.search(r"\bgroup by\b", sql_low):
+        return False
+    if re.search(r"\b(periode|convert\s*\(\s*char\s*\(\s*7)", sql_low):
+        return False
+    return bool(re.search(r"\b(count|sum)\s*\(", sql_low))
+
+
+def _period_label_from_question(question: str) -> str:
+    from backend.llm.llm_sql import _extract_year_month_range
+
+    _, month, _, _ = _extract_year_month_range(question or "")
+    if month:
+        try:
+            y, m = month.split("-", 1)
+            names = (
+                "janvier",
+                "février",
+                "mars",
+                "avril",
+                "mai",
+                "juin",
+                "juillet",
+                "août",
+                "septembre",
+                "octobre",
+                "novembre",
+                "décembre",
+            )
+            mi = int(m)
+            if 1 <= mi <= 12:
+                return f"{names[mi - 1]} {y}"
+        except (TypeError, ValueError):
+            pass
+        return month
+    m_year = re.search(r"\b(20\d{2})\b", question or "")
+    if m_year:
+        return m_year.group(1)
+    return "Période demandée"
+
+
 def _format_rows(question_lower: str, rows):
     """
     Format SQLite rows for display:
@@ -1093,8 +1141,39 @@ def process_question(question):
 
     # If query returned a time series/table (period/value), prefer returning the rows
     # rather than treating the first cell (often a date string) as a scalar KPI.
-    if result and len(result) > 0 and isinstance(result[0], (list, tuple)) and len(result[0]) >= 2:
+    if (
+        result
+        and len(result) > 0
+        and isinstance(result[0], (list, tuple))
+        and len(result[0]) >= 2
+        and not _is_single_aggregate_row(result, sql)
+    ):
         return attach_rewrite({"question": question, "result": _format_rows(ql, result)})
+
+    if _is_single_aggregate_row(result, sql) and re.search(
+        r"\bnombre_arrivages\b", (sql or ""), re.I
+    ):
+        row = result[0]
+        try:
+            n = row[0]
+            ton = float(row[1]) if len(row) > 1 and row[1] is not None else None
+            label = _period_label_from_question(question)
+            msg = f"**{label}** : {int(n) if isinstance(n, float) and n == int(n) else n} arrivages"
+            if ton is not None:
+                msg += f" · {round(ton, 2)} t importées"
+            msg += "."
+            payload: Dict[str, Any] = {
+                "question": question,
+                "nombre_arrivages": n,
+                "result": n,
+                "message": msg,
+                "source": "sql:sonasid",
+            }
+            if ton is not None:
+                payload["tonnage_total"] = ton
+            return attach_rewrite(payload)
+        except (TypeError, ValueError, IndexError):
+            pass
 
     value = get_scalar(result)
 
