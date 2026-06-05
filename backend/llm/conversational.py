@@ -59,42 +59,19 @@ def _greeting_message(actor_name: str) -> str:
     prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
     if prof in {"sonasid", "shipping", "port"}:
         if first:
-            return (
-                f"Bonjour {first}. "
-                "Assistant décisionnel **port & arrivages** — je croise vos données "
-                "(arrivages, tonnages, fournisseurs, qualités, navires) et réponds en langage naturel. "
-                "Indiquez une période si besoin, puis posez votre question."
-            )
-        return (
-            "Bonjour. Assistant décisionnel **port & arrivages** Sonasid. "
-            "Posez votre question en langage naturel ; précisez l’année ou la période pour affiner l’analyse."
-        )
+            return f"Bonjour {first}. Que souhaitez-vous analyser sur le port et les arrivages ?"
+        return "Bonjour. Que souhaitez-vous analyser sur le port et les arrivages ?"
     if first:
-        return (
-            f"Bonjour {first}. "
-            "Je suis votre assistant KPI aciérie. "
-            "Indiquez l’indicateur et la période à analyser."
-        )
-    return "Bonjour. Je suis votre assistant KPI. Indiquez l’indicateur et la période à analyser."
+        return f"Bonjour {first}. Quel indicateur souhaitez-vous consulter ?"
+    return "Bonjour. Quel indicateur souhaitez-vous consulter ?"
 
 
 def _wellbeing_message(actor_name: str) -> str:
     name = (actor_name or "").strip()
     first = name.split()[0] if name else ""
-    prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
-    if prof in {"sonasid", "shipping", "port"}:
-        if first:
-            return (
-                f"Tout est opérationnel de mon côté, merci {first}. "
-                "Sur quoi souhaitez-vous vous appuyer — arrivages, tonnage, fournisseurs ou navires ?"
-            )
-        return (
-            "Tout est opérationnel. "
-            "Sur quoi souhaitez-vous vous appuyer — arrivages, tonnage, fournisseurs ou navires ?"
-        )
     if first:
-        return f"Tout va bien, merci {first}. Quel KPI souhaitez-vous examiner ?"
-    return "Tout va bien, merci. Quel KPI souhaitez-vous examiner ?"
+        return f"Très bien, merci {first}. Comment puis-je vous aider ?"
+    return "Très bien, merci. Comment puis-je vous aider ?"
 
 
 def conversational_reply(
@@ -150,7 +127,7 @@ def conversational_reply(
 
     sys = (
         domain
-        + "Réponds en **2 à 3 phrases**, ton professionnel (vouvoiement). Pas de listes à puces.\n"
+        + "Réponds en **1 à 2 phrases courtes**, ton professionnel. Pas de listes.\n"
         + "Ne termine pas systématiquement par une question.\n"
         + "Ne réponds jamais par « Résultat: 1 ». N’exécute pas de SQL.\n"
     )

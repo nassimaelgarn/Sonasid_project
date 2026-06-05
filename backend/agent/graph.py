@@ -1044,11 +1044,7 @@ def node_chat(state: AgentState) -> AgentState:
             )
         else:
             if _is_sonasid_profile():
-                text = (
-                    "Bonjour. Assistant port & arrivages Sonasid — "
-                    "indiquez votre période et décrivez l’analyse souhaitée "
-                    "(arrivages, tonnage, fournisseurs, qualités, navires)."
-                )
+                text = "Bonjour. Que souhaitez-vous analyser sur le port et les arrivages ?"
             else:
                 text = "Bonjour ! Je peux t’aider à analyser tes KPI (production, consommations, TD/TR, MTBF/MTTR, rendement…). Dis-moi ce que tu veux regarder."
     asked_wellbeing = any(x in ql for x in ["ca va", "ça va", "cava", "cv", "va ?"])
