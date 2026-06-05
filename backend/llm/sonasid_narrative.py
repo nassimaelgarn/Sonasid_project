@@ -16,6 +16,16 @@ def _is_sonasid_profile() -> bool:
     return p in {"sonasid", "shipping", "port"}
 
 
+def _user_wants_formula(question: str) -> bool:
+    ql = (question or "").lower()
+    return bool(
+        re.search(r"\b(formule|formules|logic|logique)\b", ql)
+        or re.search(r"\b(comment|commment)\s+(calcul|est calcul)", ql)
+        or re.search(r"\b(montre|affiche|donne).{0,24}\b(formule|logic|logique)\b", ql)
+        or re.search(r"\bformule\s+(utilis|officiel|metier|métier)\b", ql)
+    )
+
+
 def enrich_sonasid_response(
     out: Dict[str, Any],
     *,
@@ -29,7 +39,7 @@ def enrich_sonasid_response(
     if str(out.get("source") or "").startswith("sonasid:brief"):
         return out
 
-    formula = guess_formula_hint(question)
+    formula = guess_formula_hint(question) if _user_wants_formula(question) else None
     if formula and not out.get("formula"):
         out["formula"] = formula
 
@@ -43,6 +53,7 @@ def enrich_sonasid_response(
         "on",
     }
     if not auto:
+        out.pop("formula", None)
         return out
 
     synth = deterministic_kpi_analyse_from_dict(out)
@@ -54,7 +65,7 @@ def enrich_sonasid_response(
         parts.append(f"**Formule / logique :** {formula}")
     if sql and _user_wants_sql(question):
         parts.append(f"**Requête T-SQL :**\n```sql\n{sql.strip()}\n```")
-    if synth:
+    if synth and not out.get("message"):
         parts.append(synth)
 
     if parts and not out.get("message"):
@@ -69,6 +80,9 @@ def enrich_sonasid_response(
             extra.append(synth)
         if extra:
             out["message"] = str(out["message"]) + "\n\n" + "\n\n".join(extra)
+
+    if not _user_wants_formula(question):
+        out.pop("formula", None)
 
     return out
 

@@ -147,6 +147,25 @@ def build_natural_message(question: str, result: Any, *, ql: str = "") -> str:
     return ""
 
 
+def user_requested_formula(question: str) -> bool:
+    ql = (question or "").lower()
+    return bool(
+        re.search(r"\b(formule|formules|logic|logique)\b", ql)
+        or re.search(r"\b(comment|commment)\s+(calcul|est calcul)", ql)
+        or re.search(r"\b(montre|affiche|donne).{0,24}\b(formule|logic|logique)\b", ql)
+        or re.search(r"\bformule\s+(utilis|officiel|metier|métier)\b", ql)
+    )
+
+
+def _strip_formula_block(text: str) -> str:
+    return re.sub(
+        r"(?:\n|^)\*\*Formule / logique :\*\*[^\n]*",
+        "",
+        str(text or ""),
+        flags=re.IGNORECASE,
+    ).strip()
+
+
 def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]:
     """
     - Masque le SQL sauf demande explicite.
@@ -167,6 +186,7 @@ def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]
         return out
 
     show_sql = user_requested_sql(question)
+    show_formula = user_requested_formula(question)
     debug = os.getenv("LLM_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
 
     internal_sql = out.get("tsql") or out.get("sql")
@@ -180,6 +200,12 @@ def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]
             out.pop("sql", None)
             out.pop("sqls", None)
             out.pop("tsqls", None)
+
+    if not show_formula:
+        out = dict(out)
+        out.pop("formula", None)
+        if out.get("message"):
+            out["message"] = _strip_formula_block(str(out["message"]))
 
     if out.get("message"):
         return out

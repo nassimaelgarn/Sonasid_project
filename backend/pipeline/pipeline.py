@@ -1308,7 +1308,6 @@ def process_question(question):
                     "question": question,
                     "result": formatted,
                     "source": "sql:sonasid",
-                    "formula": "Classement : COUNT(DISTINCT Arrivage_Id) + SUM(Arrivage_TonnageTotal) GROUP BY Fournisseur.",
                     "message": "**Top fournisseurs par arrivages**\n" + "\n".join(lines),
                 }
             )
