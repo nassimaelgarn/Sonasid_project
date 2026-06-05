@@ -1335,6 +1335,13 @@ def process_question(question):
     if (
         re.search(r"\btonnage\b", ql) or re.search(r"\b(marchandise|valeur)\b", ql, re.I)
     ) and "par mois" not in ql and "par semaine" not in ql and "par jour" not in ql:
+        try:
+            from backend.llm.sonasid_brief import _is_vague_port_overview, execute_sonasid_brief
+
+            if _is_vague_port_overview(ql):
+                return attach_rewrite(execute_sonasid_brief(q_in, "dashboard"))
+        except Exception:
+            pass
         is_import = bool(
             re.search(r"\bimport", ql, re.I)
             or re.search(r"\bmarchandise", ql, re.I)
@@ -1365,16 +1372,22 @@ def process_question(question):
     if value == 1 and sql_norm == "SELECT 1":
         _prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
         if _prof in {"sonasid", "shipping", "port"}:
+            try:
+                from backend.llm.sonasid_brief import _is_vague_port_overview, execute_sonasid_brief
+
+                if _is_vague_port_overview(ql):
+                    return attach_rewrite(execute_sonasid_brief(q_in, "dashboard"))
+            except Exception:
+                pass
             msg = (
-                "Je n’ai pas compris quel indicateur port calculer. "
-                "Peux-tu reformuler en précisant le KPI et la période ?\n"
+                "Je peux t’aider sur le port et les arrivages — précise un peu ta demande "
+                "(période, indicateur ou « récap / analyse »).\n"
                 "Exemples :\n"
-                "- résumé de tous les KPI pour 2025\n"
-                "- analyse arrivages 2025 tous les axes\n"
+                "- un petit récap sur 2025\n"
+                "- situation au port cette année\n"
                 "- quels fournisseurs ont le plus d'arrivages en 2025\n"
-                "- nombre de navires actifs par mois en 2025\n"
                 "- valeur des marchandises importées en 2025\n"
-                "- arrivages par qualité en 2025"
+                "- analyse arrivages 2025 tous les axes"
             )
         else:
             msg = (

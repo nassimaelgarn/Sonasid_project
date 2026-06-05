@@ -88,6 +88,19 @@ def main() -> int:
     ok_all &= check("SELECT autorisé", v_ok)
     ok_all &= check("DROP refusé", not v_bad)
 
+    print("\n=== 4. Questions ouvertes / vagues → brief ===")
+    vague_cases = [
+        ("situation au port cette année", "dashboard"),
+        ("un petit récap sur 2025 stp", "dashboard"),
+        ("dis-moi ce qui s'est passé côté arrivages l'an dernier", "arrivages_analysis"),
+        ("comment ça se présente niveau marchandises importées récemment", "dashboard"),
+        ("c'est quoi la situation au port cette année", "dashboard"),
+    ]
+    for q, expected_kind in vague_cases:
+        hint = detect_sonasid_brief(q)
+        ok = hint is not None and hint.get("kind") == expected_kind
+        ok_all &= check(q[:50], ok, str(hint))
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

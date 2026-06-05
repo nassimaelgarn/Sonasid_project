@@ -77,6 +77,12 @@ _SONASID_TYPO_PAIRS: tuple[tuple[str, str], ...] = (
     (r"\bdonnes?\b", "donne"),
     (r"\bveux avoir\b", "veux un"),
     (r"\bje veux un\b", "je veux"),
+    (r"\brecemment\b", "récemment"),
+    (r"\brécemmen\b", "récemment"),
+    (r"\bcette annee\b", "cette année"),
+    (r"\bl an dernier\b", "l'an dernier"),
+    (r"\blannee derniere\b", "l'année dernière"),
+    (r"\bannee derniere\b", "année dernière"),
 )
 
 

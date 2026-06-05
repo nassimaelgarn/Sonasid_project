@@ -58,6 +58,69 @@ def _extract_years(question: str) -> List[int]:
     return yrs
 
 
+def _resolve_brief_years(question: str) -> List[int]:
+    """Année explicite, sinon expressions relatives (cette année, l'an dernier, récemment…)."""
+    yrs = _extract_years(question)
+    if yrs:
+        return yrs
+    from datetime import datetime
+
+    now = datetime.now()
+    ql = re.sub(r"\s+", " ", (question or "").lower()).strip()
+    if re.search(
+        r"\b(l'an dernier|l année dernière|l'année dernière|annee derniere|année dernière|dernière année|derniere annee)\b",
+        ql,
+    ):
+        return [now.year - 1]
+    if re.search(r"\b(cette année|annee en cours|année en cours|cette annee)\b", ql):
+        return [now.year]
+    if re.search(r"\b(récemment|recemment|derniers mois|derniers temps|recent)\b", ql):
+        return [now.year]
+    return [now.year]
+
+
+def _is_vague_port_overview(ql: str) -> bool:
+    """Question ouverte port / arrivages sans KPI explicite (pas une requête technique)."""
+    if re.search(r"\b(formule|requete|requête|sql|query)\b", ql):
+        return False
+    if re.search(r"\b(par mois|par jour|par semaine|top\s*\d+|fournisseur\s+id|navire\s+id)\b", ql):
+        return False
+    if re.search(r"\b(combien|nombre|count|total|liste des|classement|top)\b", ql) and not re.search(
+        r"\b(situation|recap|récap|résumé|resume|synthèse|synthese|comment|dis[- ]?moi)\b", ql
+    ):
+        return False
+
+    domain = bool(
+        re.search(
+            r"\b(port|arrivages?|sonasid|marchandises?|import|navires?|tonnage|d[eéè]chargement|accostage)\b",
+            ql,
+        )
+    )
+    vague_open = (
+        r"\b(situation|état|etat|bilan|panorama|vue d'ensemble|vue globale)\b",
+        r"\b(c'est quoi|cest quoi|comment ça va|comment ca va|à quoi ressemble|a quoi ressemble)\b",
+        r"\b(ce qui s['']?est passé|qu'est-il arrivé|quest il arrive|quoi de neuf)\b",
+        r"\b(comment ça se présente|comment ca se presente|comment se presente)\b",
+        r"\b(petit|un|mini|le)?\s*(recap|récap|recapitulatif|résumé|resume|synthèse|synthese)\b",
+        r"\b(dis[- ]?moi|explique|raconte|parle moi|fais moi)\b",
+        r"\bniveau\b.*\b(marchandises?|import|arrivages?|port|tonnage)\b",
+        r"\b(marchandises?|import|arrivages?|port)\b.*\b(récemment|recemment|cette année|l'an dernier)\b",
+        r"\b(récemment|recemment|derniers mois|derniers temps)\b.*\b(marchandises?|import|arrivages?|port)\b",
+    )
+    if any(re.search(p, ql) for p in vague_open):
+        if domain:
+            return True
+        if re.search(r"\b(recap|récap|résumé|resume|synthèse|synthese)\b", ql) and re.search(
+            r"\b(20\d{2}|cette année|l'an dernier|année)\b", ql
+        ):
+            return True
+    if re.search(r"\b(situation|état|etat|bilan)\b", ql) and re.search(
+        r"\b(port|cette année|20\d{2}|arrivages?)\b", ql
+    ):
+        return True
+    return False
+
+
 def _year_clause(field: str, year: int) -> str:
     return f"{field} >= '{year:04d}-01-01' AND {field} < '{year + 1:04d}-01-01'"
 
@@ -73,6 +136,14 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
     from backend.llm.llm_sql import normalize_user_question
 
     ql = re.sub(r"\s+", " ", normalize_user_question(question or "").lower()).strip()
+
+    if _is_vague_port_overview(ql):
+        if re.search(r"\b(analyse|analyser|axes|multi|d[eéè]taill)\b", ql) or (
+            re.search(r"\barrivages?\b", ql)
+            and re.search(r"\b(passé|passe|c[oô]t[eé]|historique|l'an dernier|année dernière)\b", ql)
+        ):
+            return {"kind": "arrivages_analysis"}
+        return {"kind": "dashboard"}
 
     if re.search(r"\b(kpi|kip|indicateurs?)\b", ql) and re.search(
         r"\b(résumé|resume|recap|récap|synthèse|synthese|tableau de bord|donne|donne-moi|tous|ensemble|global|principaux?|l'ensemble)\b",
@@ -107,11 +178,7 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
 
 def execute_sonasid_brief(question: str, kind: str) -> Dict[str, Any]:
     q = normalize_kpi_question(question)
-    years = _extract_years(q)
-    if not years:
-        from datetime import datetime
-
-        years = [datetime.now().year]
+    years = _resolve_brief_years(q)
 
     if kind == "dashboard":
         return _run_dashboard(q, years)
@@ -119,10 +186,11 @@ def execute_sonasid_brief(question: str, kind: str) -> Dict[str, Any]:
 
 
 def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
+    period_label = ", ".join(str(y) for y in years)
     lines: List[str] = [
-        f"**Résumé port & arrivages — {', '.join(str(y) for y in years)}**",
+        f"**Résumé port & arrivages — {period_label}**",
         "",
-        "Synthèse des indicateurs clés port & arrivages.",
+        "Voici une synthèse des principaux indicateurs port & arrivages.",
         "",
     ]
     all_rows: List[Dict[str, Any]] = []
