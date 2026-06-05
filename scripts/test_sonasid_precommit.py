@@ -131,6 +131,11 @@ def main() -> int:
         "réponse schéma ARRIVAGE",
         "ARRIVAGE" in str(rep.get("message", "")) and rep.get("source") == "sonasid:schema",
     )
+    count_q = "cite le nombre des tables dans la base de données"
+    ok_all &= check(
+        "nombre tables → inventaire",
+        is_schema_metadata_question(count_q) and "tables" in schema_metadata_reply(count_q).get("message", "").lower(),
+    )
 
     print("\n=== 5. Questions ouvertes / vagues → brief ===")
     vague_cases = [

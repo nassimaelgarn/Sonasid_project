@@ -118,11 +118,87 @@ def is_schema_metadata_question(text: str) -> bool:
     if has_table and has_meta:
         return True
     if re.search(
-        r"\b(communiquer|donne|donner|affiche|montre|explique).{0,50}\b(tables?|sch[eé]ma|relations?)\b",
+        r"\b(communiquer|donne|donner|affiche|montre|explique|citer|cite)\b.{0,50}\b(tables?|sch[eé]ma|relations?)\b",
         ql,
     ):
         return True
+    if _wants_live_table_inventory(ql):
+        return True
     return False
+
+
+def _wants_live_table_inventory(ql: str) -> bool:
+    if re.search(r"\b(nombre|combien|count|total)\b", ql) and re.search(r"\btables?\b", ql):
+        return True
+    if re.search(r"\b(citer|cite|communiquer|donne|donner)\b", ql) and re.search(
+        r"\b(nombre|combien)\b.*\btables?\b|\btables?\b.*\b(nombre|combien)\b", ql
+    ):
+        return True
+    if re.search(r"\b(liste|lister)\b", ql) and re.search(r"\btoutes?\s+les\s+tables?\b", ql):
+        return True
+    return False
+
+
+def _query_live_tables() -> tuple[list[dict[str, str]] | None, str | None]:
+    try:
+        from backend.database.azure_sql import is_azure_provider, list_tables
+
+        if not is_azure_provider():
+            return None, "base locale (pas Azure SQL)"
+        return list_tables(schema="dbo", limit=500), None
+    except Exception as e:
+        return None, str(e) or repr(e)
+
+
+def build_table_inventory_message(question: str = "") -> str:
+    ql = (question or "").lower()
+    kpi_ref = sorted(allowed_table_names())
+    tables, err = _query_live_tables()
+
+    if tables is not None:
+        names = [str(t.get("name") or "") for t in tables if t.get("name")]
+        kpi_in_db = [n for n in names if n.upper() in kpi_ref]
+        lines = [
+            "**Inventaire tables (lecture directe Azure SQL, schéma dbo)**",
+            "",
+            f"- **Total tables** : **{len(names)}**",
+            f"- **Tables métier POC Sonasid** présentes : **{len(kpi_in_db)}** "
+            f"(sur {len(kpi_ref)} documentées)",
+        ]
+        if kpi_in_db:
+            lines.append(f"- **KPI** : {', '.join(kpi_in_db)}")
+        missing = [t for t in kpi_ref if t not in {n.upper() for n in names}]
+        if missing:
+            lines.append(f"- _Non trouvées en base_ : {', '.join(missing)}")
+        wants_list = bool(
+            re.search(r"\b(liste|lister|noms?|citer?|cite|affiche|montre|communiquer)\b", ql)
+            or re.search(r"\btoutes?\s+les\s+tables?\b", ql)
+        )
+        if wants_list and names:
+            lines.append("")
+            if len(names) <= 35:
+                lines.append("**Liste complète :**")
+                lines.append(", ".join(names))
+            else:
+                lines.append("**Aperçu (35 premières) :**")
+                lines.append(", ".join(names[:35]) + f" … (+{len(names) - 35})")
+        lines.append("")
+        lines.append(
+            "_Source : `INFORMATION_SCHEMA.TABLES` sur la base connectée (pas le LLM)._"
+        )
+        return "\n".join(lines)
+
+    lines = [
+        "**Nombre de tables**",
+        "",
+        f"Impossible d’interroger Azure SQL pour l’instant ({err or 'erreur inconnue'}).",
+        f"**Tables documentées dans le dictionnaire POC** : **{len(kpi_ref)}**",
+        "",
+        ", ".join(kpi_ref),
+        "",
+        "Vérifiez la connexion SQL (firewall VM, `DB_PROVIDER=azure`) puis réessayez.",
+    ]
+    return "\n".join(lines)
 
 
 def _table_section_from_markdown(table: str) -> str:
@@ -194,9 +270,14 @@ def build_schema_overview_message(question: str = "") -> str:
 
 
 def schema_metadata_reply(question: str) -> Dict[str, Any]:
+    ql = (question or "").lower()
+    if _wants_live_table_inventory(ql):
+        message = build_table_inventory_message(question)
+    else:
+        message = build_schema_overview_message(question)
     return {
         "question": (question or "").strip(),
-        "message": build_schema_overview_message(question),
+        "message": message,
         "source": "sonasid:schema",
     }
 
