@@ -131,6 +131,14 @@ def conversational_reply(
             "source": "conversational:greeting",
         }
 
+    try:
+        from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
+
+        if is_schema_metadata_question(q):
+            return schema_metadata_reply(q)
+    except Exception:
+        pass
+
     rag = ""
     try:
         from backend.rag.store import build_rag_context

@@ -118,6 +118,20 @@ def main() -> int:
         str(raw_liste)[:90],
     )
 
+    print("\n=== 5b. Schéma / tables (sans LLM) ===")
+    from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
+
+    schema_q = "Merci de me communiquer les noms des tables et leurs relations dans la base de données"
+    rep = schema_metadata_reply(schema_q)
+    ok_all &= check(
+        "question schéma détectée",
+        is_schema_metadata_question(schema_q),
+    )
+    ok_all &= check(
+        "réponse schéma ARRIVAGE",
+        "ARRIVAGE" in str(rep.get("message", "")) and rep.get("source") == "sonasid:schema",
+    )
+
     print("\n=== 5. Questions ouvertes / vagues → brief ===")
     vague_cases = [
         ("situation au port cette année", "dashboard"),

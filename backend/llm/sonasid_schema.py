@@ -7,6 +7,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, Dict
 
 
 def _project_root() -> Path:
@@ -94,6 +95,110 @@ def allowed_table_names() -> frozenset[str]:
         if base:
             names.add(base)
     return frozenset(names)
+
+
+def is_schema_metadata_question(text: str) -> bool:
+    """Question sur le schéma / tables / relations (sans chiffres KPI)."""
+    if not _is_sonasid_profile():
+        return False
+    ql = (text or "").lower()
+    if re.search(
+        r"\b(noms?\s+des\s+tables|tables\s+et\s+leurs\s+relations|mod[eè]le\s+relationnel)\b", ql
+    ):
+        return True
+    has_table = bool(
+        re.search(r"\b(tables?|sch[eé]ma|dictionnaire|bdd|base\s+de\s+donn[eé]es)\b", ql)
+    )
+    has_meta = bool(
+        re.search(
+            r"\b(relations?|jointures?|structure|liens?|cl[eé]s?|foreign|fk|colonnes?|champs?|noms?)\b",
+            ql,
+        )
+    )
+    if has_table and has_meta:
+        return True
+    if re.search(
+        r"\b(communiquer|donne|donner|affiche|montre|explique).{0,50}\b(tables?|sch[eé]ma|relations?)\b",
+        ql,
+    ):
+        return True
+    return False
+
+
+def _table_section_from_markdown(table: str) -> str:
+    """Extrait la section ## dbo.TABLE du dictionnaire."""
+    raw = load_schema_markdown()
+    name = table.upper().replace("DBO.", "")
+    pattern = rf"(?ms)^## dbo\.{re.escape(name)}\s*\n(.*?)(?=^## |\Z)"
+    m = re.search(pattern, raw)
+    if not m:
+        return ""
+    body = m.group(1).strip()
+    if len(body) > 3500:
+        body = body[:3500] + "\n\n… (section tronquée — demandez un sous-ensemble de champs)"
+    return body
+
+
+def build_schema_overview_message(question: str = "") -> str:
+    ql = (question or "").lower()
+    m_table = re.search(r"\b(?:table|dbo\.)\s*([A-Z_a-z][A-Z_a-z0-9_]*)\b", question or "", re.I)
+    if m_table:
+        section = _table_section_from_markdown(m_table.group(1))
+        if section:
+            return f"**Table dbo.{m_table.group(1).upper()}**\n\n{section}"
+
+    lines = [
+        "**Schéma Sonasid — port & arrivages**",
+        "",
+        "**Modèle relationnel**",
+        "```",
+        "ARRIVAGE (1) ──< COMMANDE (1) ──< TRANSFERT",
+        "ARRIVAGE (1) ──< NOMINATION_NAVIRE >── NAVIRE",
+        "                    ├── COMPAGNIE_MARITIME",
+        "                    └── TRANSITAIRE",
+        "ARRIVAGE (1) ──< SUIVI_DECHARGEMENT >── SHIFT",
+        "```",
+        "",
+        "**Tables KPI (requêtes chatbot)**",
+        "- **ARRIVAGE** — cycle arrivage, tonnage importé (`Arrivage_TonnageTotal`), déchargement",
+        "- **COMMANDE** — commandes liées (`Commande_QualiteId`, `Commande_Tonnage`)",
+        "- **TRANSFERT** — transferts (`Transfert_PoidsNet`, `Transfert_CommandeId`)",
+        "- **NAVIRE** + **NOMINATION_NAVIRE** — navire rattaché à un arrivage",
+        "- **QUALITE** — libellés matières (`Qualite_Libelle`)",
+        "- **FOURNISSEUR** — fournisseurs (`Arrivage_FournisseurId`)",
+        "- **SUIVI_DECHARGEMENT** — quantités déchargées par shift",
+        "",
+        "**Référentiels** : PORT, BANQUE, DEVISE, SHIFT, STATUT, UTILISATEUR, "
+        "NATURE_MARCHANDISE, PRESTATAIRE, CONDUCTEUR, FLOTTE, …",
+        "",
+        "**Jointures usuelles**",
+        "- Tonnage transféré : `TRANSFERT → COMMANDE → ARRIVAGE` (+ `QUALITE`)",
+        "- Navire : `ARRIVAGE → NOMINATION_NAVIRE → NAVIRE`",
+        "- Fournisseur : `ARRIVAGE → FOURNISSEUR`",
+        "",
+        "Pour le détail d’une table : « structure de la table COMMANDE » ou « champs ARRIVAGE ».",
+    ]
+    if re.search(r"\b(d[eé]tail|complet|toutes?\s+les\s+tables)\b", ql):
+        raw = load_schema_markdown()
+        if len(raw) < 8000:
+            lines.append("")
+            lines.append("---")
+            lines.append(raw)
+        else:
+            lines.append("")
+            lines.append(
+                "_Le dictionnaire complet est dans `docs/dictionnaire_sonasid.md` "
+                "(15+ tables documentées)._"
+            )
+    return "\n".join(lines)
+
+
+def schema_metadata_reply(question: str) -> Dict[str, Any]:
+    return {
+        "question": (question or "").strip(),
+        "message": build_schema_overview_message(question),
+        "source": "sonasid:schema",
+    }
 
 
 def guess_formula_hint(question: str) -> str:
