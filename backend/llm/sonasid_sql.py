@@ -178,15 +178,16 @@ def _wants_transfert_qualite_detail(ql: str) -> bool:
 
 
 def _is_tonnage_importe_question(ql: str) -> bool:
-    if re.search(r"\bimport[eéè]?\b", ql, re.I) and re.search(r"\btonnage\b", ql):
+    has_import = bool(re.search(r"\bimport", ql, re.I))
+    if has_import and re.search(r"\btonnage\b", ql):
         return True
-    if re.search(r"\bimport[eéè]?\b", ql, re.I) and re.search(
+    if has_import and re.search(r"\b(marchandise|marchandises)\b", ql, re.I):
+        return True
+    if re.search(r"\b(valeur|valeurs)\b", ql, re.I) and re.search(
         r"\b(marchandise|marchandises)\b", ql, re.I
     ):
         return True
-    if re.search(r"\b(valeur|valeurs)\b", ql, re.I) and re.search(
-        r"\b(marchandise|marchandises|import)\b", ql, re.I
-    ):
+    if re.search(r"\b(valeur|valeurs)\b", ql, re.I) and has_import:
         return True
     return False
 

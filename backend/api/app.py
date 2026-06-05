@@ -406,8 +406,22 @@ app.add_middleware(
 
 
 @app.get("/healthz")
-def healthz() -> Dict[str, str]:
-    return {"status": "ok"}
+def healthz() -> Dict[str, Any]:
+    """Santé API + indicateurs de déploiement (vérif. règles Sonasid actives)."""
+    try:
+        from backend.llm import sonasid_sql as ss
+
+        mod = getattr(ss, "__file__", "") or ""
+        src = Path(mod).read_text(encoding="utf-8", errors="replace") if mod else ""
+        marchandise_ok = "marchandises" in src and "_is_tonnage_importe_question" in src
+    except Exception:
+        marchandise_ok = False
+    return {
+        "status": "ok",
+        "db_provider": (os.getenv("DB_PROVIDER", "") or "").strip(),
+        "azure_sql_profile": (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip(),
+        "sonasid_marchandise_rules": marchandise_ok,
+    }
 
 
 def _session_user(request: Request) -> Optional[Dict[str, Any]]:
