@@ -98,6 +98,33 @@ def _resolve_brief_years(question: str) -> List[int]:
     return [datetime.now().year]
 
 
+def _is_specific_kpi_question(ql: str) -> bool:
+    """KPI ciblé (id, métrique, dimension) — ne pas remplacer par un brief générique."""
+    if re.search(r"\b(navire|fournisseur)\s*(?:id\s*)?\d+\b", ql):
+        return True
+    if re.search(r"\b(navire|fournisseur)\s+[a-zA-Z0-9]", ql) and not re.search(
+        r"\b(analyse|axes|synthèse|synthese|résumé|resume|récap|recap|situation)\b", ql
+    ):
+        return True
+    if re.search(r"\b(transf[eé]r|d[eéè]charg|command[eé]|accostage|demurrage|surestarie)\b", ql):
+        return True
+    if re.search(r"\b(par mois|mensuel|par semaine|par jour|top\s*\d+)\b", ql):
+        return True
+    if re.search(r"\b(quels?|quelles?|classement|ranking|liste des)\b", ql):
+        return True
+    if re.search(r"\b(d[eé]tail|ligne par ligne)\b", ql):
+        return True
+    if re.search(r"\b(tonnage|arrivages?)\b", ql) and re.search(r"\b(par|pour chaque|chaque)\b", ql):
+        if re.search(r"\b(qualit|fournisseur|navire|mois)\b", ql):
+            return True
+    if re.search(
+        r"\b(nombre|combien|count)\b.*\b(arrivages?|navires?|tonnage|transf)\b", ql
+    ) or re.search(r"\b(arrivages?|navires?|tonnage)\b.*\b(nombre|combien|count)\b", ql):
+        if not re.search(r"\b(analyse|axes|synthèse|synthese|résumé|resume|récap|recap|situation)\b", ql):
+            return True
+    return False
+
+
 def _is_vague_port_overview(ql: str) -> bool:
     """Question ouverte port / arrivages sans KPI explicite (pas une requête technique)."""
     if re.search(r"\b(formule|requete|requête|sql|query)\b", ql):
@@ -156,6 +183,9 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
 
     ql = re.sub(r"\s+", " ", normalize_user_question(question or "").lower()).strip()
 
+    if _is_specific_kpi_question(ql):
+        return None
+
     if _is_vague_port_overview(ql):
         if re.search(r"\b(analyse|analyser|axes|multi|d[eéè]taill)\b", ql) or (
             re.search(r"\barrivages?\b", ql)
@@ -174,9 +204,6 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
         r"\b(port|arrivages?|sonasid|marchandises?)\b", ql
     ):
         return {"kind": "dashboard"}
-
-    if re.search(r"\btonnage\b", ql) and re.search(r"\bqualit", ql) and re.search(r"\b20\d{2}\b", ql):
-        return {"kind": "arrivages_analysis"}
 
     if re.search(r"\barrivages?\b", ql) or (
         re.search(r"\bnavires?\b", ql) and re.search(r"\barrivages?\b", ql)

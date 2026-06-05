@@ -96,7 +96,16 @@ def main() -> int:
     ok_all &= check("SELECT autorisé", v_ok)
     ok_all &= check("DROP refusé", not v_bad)
 
-    print("\n=== 4. Questions ouvertes / vagues → brief ===")
+    print("\n=== 4. KPI précis ≠ brief générique ===")
+    specific_cases = [
+        "tonnage transféré par qualité navire id 79 en 2025",
+        "tonnage transféré par qualité en 2025",
+        "quels navires ont le plus de tonnage transféré en 2025 ?",
+    ]
+    for q in specific_cases:
+        ok_all &= check(f"pas brief: {q[:42]}", detect_sonasid_brief(q) is None)
+
+    print("\n=== 5. Questions ouvertes / vagues → brief ===")
     vague_cases = [
         ("situation au port cette année", "dashboard"),
         ("un petit récap sur 2025 stp", "dashboard"),
@@ -109,7 +118,7 @@ def main() -> int:
         ok = hint is not None and hint.get("kind") == expected_kind
         ok_all &= check(q[:50], ok, str(hint))
 
-    print("\n=== 5. Périodes relatives (l'an dernier → 2025) ===")
+    print("\n=== 6. Périodes relatives (l'an dernier → 2025) ===")
     from datetime import datetime
     from backend.llm.sonasid_brief import _resolve_brief_years
 
@@ -128,7 +137,7 @@ def main() -> int:
             ok = yrs == [datetime.now().year]
         ok_all &= check(q[:45], ok, str(yrs))
 
-    print("\n=== 6. Questions ouvertes → SQL / expansion ===")
+    print("\n=== 7. Questions ouvertes → SQL / expansion ===")
     from backend.llm.sonasid_sql import expand_sonasid_open_question
     from backend.llm.conversational import should_use_kpi_pipeline
 
@@ -144,7 +153,7 @@ def main() -> int:
         ok = should_use_kpi_pipeline(q) == kpi and needle in (expanded + " " + sql)
         ok_all &= check(q[:42], ok, expanded[:60])
 
-    print("\n=== 7. Mode Sonasid ouvert (LLM-first) ===")
+    print("\n=== 8. Mode Sonasid ouvert (LLM-first) ===")
     from backend.llm.sonasid_open import (
         is_sonasid_llm_first,
         is_sonasid_open_mode,
