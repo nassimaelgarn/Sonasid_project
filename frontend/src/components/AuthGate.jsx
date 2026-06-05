@@ -134,7 +134,15 @@ export default function AuthGate({ children }) {
       await refreshMe()
       setPassword('')
     } catch (e2) {
-      setErr(e2?.message || String(e2 || 'Erreur'))
+      const msg = e2?.message || String(e2 || 'Erreur')
+      if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+        setErr(
+          'Impossible de joindre l’API backend.\n'
+            + 'Sur la VM : git pull && bash scripts/vm_fix_login.sh && pm2 restart my-frontend',
+        )
+      } else {
+        setErr(msg)
+      }
     } finally {
       setBusy(false)
     }

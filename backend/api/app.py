@@ -394,7 +394,10 @@ app = FastAPI(title="Sonasid KPI API", version="0.1.0")
 app.add_middleware(SessionMiddleware, secret_key=_SESSION_SECRET, same_site="lax", https_only=False)
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()]
-cors_origin_regex = os.getenv("CORS_ORIGIN_REGEX", r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$").strip() or None
+cors_origin_regex = os.getenv(
+    "CORS_ORIGIN_REGEX",
+    r"^https?://(localhost|127\.0\.0\.1|\d{1,3}(?:\.\d{1,3}){3}|[\w.-]+\.cloudapp\.azure\.com)(:\d+)?$",
+).strip() or None
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

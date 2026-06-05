@@ -2384,7 +2384,7 @@ export default function ChatWorkspace() {
                     type="button"
                     className="btn-primary text-xs"
                     onClick={async () => {
-                      const baseUrl = (import.meta.env.VITE_API_BASE || `http://${window.location.hostname || 'localhost'}:8000`).replace(/\/$/, '')
+                      const baseUrl = (import.meta.env.VITE_API_BASE || `http://${window.location.hostname || 'localhost'}:8001`).replace(/\/$/, '')
                       try {
                         await fetch(`${baseUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
                       } finally {
