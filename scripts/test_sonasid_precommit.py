@@ -101,6 +101,25 @@ def main() -> int:
         ok = hint is not None and hint.get("kind") == expected_kind
         ok_all &= check(q[:50], ok, str(hint))
 
+    print("\n=== 5. Périodes relatives (l'an dernier → 2025) ===")
+    from datetime import datetime
+    from backend.llm.sonasid_brief import _resolve_brief_years
+
+    expected_last = datetime.now().year - 1
+    period_cases = [
+        "dis-moi ce qui s'est passé côté arrivages l'an dernier",
+        "arrivages lan dernier",
+        "situation port l an dernier",
+        f"situation port cette année",
+    ]
+    for q in period_cases:
+        yrs = _resolve_brief_years(q)
+        if "dernier" in q or "lan dernier" in q or "l an dernier" in q:
+            ok = yrs == [expected_last]
+        else:
+            ok = yrs == [datetime.now().year]
+        ok_all &= check(q[:45], ok, str(yrs))
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

@@ -58,25 +58,44 @@ def _extract_years(question: str) -> List[int]:
     return yrs
 
 
+def _normalize_ql_for_period(question: str) -> str:
+    ql = re.sub(r"\s+", " ", (question or "").lower()).strip()
+    for ch in ("\u2019", "\u2018", "`", "\u00b4"):
+        ql = ql.replace(ch, "'")
+    ql = re.sub(r"\blan dernier\b", "l'an dernier", ql)
+    ql = re.sub(r"\bl an dernier\b", "l'an dernier", ql)
+    return ql
+
+
+def _relative_period_years(ql: str) -> Optional[List[int]]:
+    from datetime import datetime
+
+    now = datetime.now()
+    if re.search(
+        r"\b(l'an dernier|l'année dernière|l année dernière|annee derniere|année dernière|année passée|"
+        r"annee passee|dernière année|derniere annee|last year|an passé|an passe)\b",
+        ql,
+    ):
+        return [now.year - 1]
+    if re.search(r"\b(cette année|annee en cours|année en cours|cette annee|this year|an en cours)\b", ql):
+        return [now.year]
+    if re.search(r"\b(récemment|recemment|derniers mois|derniers temps|recent)\b", ql):
+        return [now.year]
+    return None
+
+
 def _resolve_brief_years(question: str) -> List[int]:
-    """Année explicite, sinon expressions relatives (cette année, l'an dernier, récemment…)."""
-    yrs = _extract_years(question)
+    """Expressions relatives (l'an dernier…) prioritaires sur une année explicite ou le défaut."""
+    ql = _normalize_ql_for_period(question)
+    rel = _relative_period_years(ql)
+    if rel:
+        return rel
+    yrs = _extract_years(ql)
     if yrs:
         return yrs
     from datetime import datetime
 
-    now = datetime.now()
-    ql = re.sub(r"\s+", " ", (question or "").lower()).strip()
-    if re.search(
-        r"\b(l'an dernier|l année dernière|l'année dernière|annee derniere|année dernière|dernière année|derniere annee)\b",
-        ql,
-    ):
-        return [now.year - 1]
-    if re.search(r"\b(cette année|annee en cours|année en cours|cette annee)\b", ql):
-        return [now.year]
-    if re.search(r"\b(récemment|recemment|derniers mois|derniers temps|recent)\b", ql):
-        return [now.year]
-    return [now.year]
+    return [datetime.now().year]
 
 
 def _is_vague_port_overview(ql: str) -> bool:

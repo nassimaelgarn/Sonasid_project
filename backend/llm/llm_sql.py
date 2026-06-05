@@ -287,7 +287,25 @@ def question_has_explicit_period(question: str) -> bool:
         return True
     if re.search(r"\bentre\s+le\s+\d{4}-\d{2}-\d{2}\b", ql):
         return True
+    if _question_mentions_relative_period(ql):
+        return True
     return False
+
+
+def _question_mentions_relative_period(ql: str) -> bool:
+    s = re.sub(r"\s+", " ", (ql or "").lower()).strip()
+    for ch in ("\u2019", "\u2018", "`", "\u00b4"):
+        s = s.replace(ch, "'")
+    s = re.sub(r"\blan dernier\b", "l'an dernier", s)
+    s = re.sub(r"\bl an dernier\b", "l'an dernier", s)
+    return bool(
+        re.search(
+            r"\b(l'an dernier|l'année dernière|l année dernière|annee derniere|année dernière|année passée|"
+            r"annee passee|dernière année|derniere annee|last year|cette année|annee en cours|année en cours|"
+            r"cette annee|this year|récemment|recemment|derniers mois|derniers temps|recent)\b",
+            s,
+        )
+    )
 
 
 def kpi_period_span_from_question(question: str) -> str:
