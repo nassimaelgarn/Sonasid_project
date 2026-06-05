@@ -361,13 +361,20 @@ def _navire_predicate(ql: str) -> Optional[str]:
     m_id = re.search(r"\bnavire\s*(?:id\s*)?(\d+)\b", ql)
     if m_id:
         return f"nv.Navire_Id = {int(m_id.group(1))}"
+    if re.search(r"\bnavire\s+(?:en|pour|de|du)\s+(?:20\d{2}|\d)", ql, re.I):
+        return None
     m_name = re.search(
-        r"\bnavire\s+([a-zA-Z0-9][a-zA-Z0-9 \-'']+?)(?:\s+(?:en|pour|de|du|\d{4})|\s*$)",
+        r"\bnavire\s+(?!id\s*\d)([a-zA-Z][a-zA-Z0-9 \-''&]{2,}?)\s+(?:en|pour|de|du|\d{4})",
         ql,
         re.I,
     )
+    if not m_name:
+        m_name = re.search(r"\bnavire\s+(?!id\s*\d)([a-zA-Z][a-zA-Z0-9 \-''&]{2,})\s*$", ql, re.I)
     if m_name:
-        name = m_name.group(1).strip().replace("'", "''")
+        name = m_name.group(1).strip()
+        if len(name) < 3 or name.lower() in {"des", "les", "par", "une", "aux", "sur"}:
+            return None
+        name = name.replace("'", "''")
         return f"nv.Navire_Nom LIKE N'%{name}%'"
     return None
 
@@ -730,7 +737,7 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
         )
 
     # --- Tonnage transféré par qualité par navire (formule officielle) ---
-    if re.search(r"\btransf", ql) and re.search(r"\bqual", ql) and re.search(r"\bnavire\b", ql):
+    if re.search(r"\btransf", ql) and re.search(r"\bqual", ql) and re.search(r"\bnavires?\b", ql):
         nav = _navire_predicate(ql)
         if not nav:
             return _need_navire_response()

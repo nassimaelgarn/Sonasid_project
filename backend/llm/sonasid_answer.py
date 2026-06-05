@@ -142,6 +142,8 @@ def build_natural_message(question: str, result: Any, *, ql: str = "") -> str:
         elif re.search(r"\btonnage\b", ql):
             label = "Tonnage"
         elif re.search(r"\bnavires?\b", ql):
+            if re.search(r"\btransf", ql) and re.search(r"\bqualit", ql):
+                return ""
             label = "Navires"
         return f"**{label}** : {_fmt_num(float(result))}"
 

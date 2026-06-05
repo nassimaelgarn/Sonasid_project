@@ -101,9 +101,14 @@ def main() -> int:
         "tonnage transféré par qualité navire id 79 en 2025",
         "tonnage transféré par qualité en 2025",
         "quels navires ont le plus de tonnage transféré en 2025 ?",
+        "tonnage transféré par qualité navire en 2025",
     ]
     for q in specific_cases:
-        ok_all &= check(f"pas brief: {q[:42]}", detect_sonasid_brief(q) is None)
+        ok = detect_sonasid_brief(q) is None
+        if q.endswith("navire en 2025"):
+            raw = try_sonasid_kpi_sql(q)
+            ok = ok and isinstance(raw, dict) and raw.get("type") == "need_navire"
+        ok_all &= check(f"pas brief: {q[:42]}", ok)
 
     print("\n=== 5. Questions ouvertes / vagues → brief ===")
     vague_cases = [

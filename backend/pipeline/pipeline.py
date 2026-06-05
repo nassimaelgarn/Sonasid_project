@@ -119,6 +119,20 @@ def _period_label_from_question(question: str) -> str:
     return "Période demandée"
 
 
+def _navire_label_from_question(ql: str) -> str:
+    m_id = re.search(r"\bnavire\s*(?:id\s*)?(\d+)\b", ql, re.I)
+    if m_id:
+        return f"navire id {m_id.group(1)}"
+    m_name = re.search(
+        r"\bnavire\s+([a-zA-Z0-9][a-zA-Z0-9 \-'']{2,}?)(?:\s+(?:en|pour|de|du|\d{4})|\s*$)",
+        ql,
+        re.I,
+    )
+    if m_name:
+        return f"navire {m_name.group(1).strip()}"
+    return "navire demandé"
+
+
 def _build_monthly_series_message(
     question: str,
     rows: List[Dict[str, Any]],
@@ -235,16 +249,19 @@ def _format_rows(question_lower: str, rows):
             # Transfert officiel : Qualite_Libelle, Commande_QualiteId, Transfert_PoidsNet
             return [{"qualite": r[0], "qualite_id": r[1], "poids_net": r[2]} for r in rows]
         if ("qualite" in question_lower or "qualité" in question_lower) and len(first) >= 5:
-            return [
-                {
+            rows_out = []
+            for r in rows:
+                row_out: Dict[str, Any] = {
                     "arrivage_id": r[0],
                     "navire": r[1],
                     "qualite_id": r[2],
                     "qualite": r[3],
                     "value": r[4],
                 }
-                for r in rows
-            ]
+                if re.search(r"\btransf", question_lower):
+                    row_out["tonnage_transfere"] = r[4]
+                rows_out.append(row_out)
+            return rows_out
         if re.search(r"\bd[eéè]charg", question_lower, re.I) and len(first) >= 4:
             return [
                 {
@@ -1444,9 +1461,55 @@ def process_question(question):
                 "message": f"Arrivages en déchargement : {n}",
                 "source": "sql:sonasid",
             }
-        )
+            )
+    if (
+        re.search(r"\bnavires?\b", ql)
+        and re.search(r"\btransf", ql)
+        and re.search(r"\bqualit", ql, re.I)
+    ):
+        year_m = re.search(r"\b(20\d{2})\b", ql)
+        yr = year_m.group(1) if year_m else "la période demandée"
+        nav_label = _navire_label_from_question(ql)
+        if isinstance(result, list) and not result:
+            return attach_rewrite(
+                {
+                    "question": question,
+                    "result": [],
+                    "source": "sql:sonasid",
+                    "message": (
+                        f"Aucun tonnage transféré trouvé pour **{nav_label}** en **{yr}**.\n"
+                        "Vérifiez l’identifiant ou le nom du navire, ou élargissez la période."
+                    ),
+                }
+            )
+        if isinstance(result, list) and result and isinstance(result[0], (list, tuple)):
+            formatted = _format_rows(ql, result)
+            if isinstance(formatted, list) and formatted:
+                lines = []
+                nav_title = formatted[0].get("navire") or nav_label
+                for row in formatted[:30]:
+                    qual = row.get("qualite") or "—"
+                    ton = row.get("tonnage_transfere") or row.get("value")
+                    arr = row.get("arrivage_id")
+                    if arr is not None:
+                        lines.append(f"- **{qual}** (arrivage {arr}) — {_clean_num(ton)} t")
+                    else:
+                        lines.append(f"- **{qual}** — {_clean_num(ton)} t")
+                return attach_rewrite(
+                    {
+                        "question": question,
+                        "result": formatted,
+                        "source": "sql:sonasid",
+                        "message": (
+                            f"**Tonnage transféré par qualité — {nav_title} ({yr})**\n"
+                            + "\n".join(lines)
+                        ),
+                    }
+                )
     if re.search(r"\bnavires?\b", ql) and not re.search(r"\barrivages?\b", ql):
-        if re.search(r"\bd[eéè]charg", ql, re.I) and not re.search(
+        if re.search(r"\btransf", ql) and re.search(r"\bqualit", ql, re.I):
+            pass
+        elif re.search(r"\bd[eéè]charg", ql, re.I) and not re.search(
             r"\bnombre_navires_en_dechargement\b", (sql or ""), re.I
         ):
             pass
