@@ -110,6 +110,14 @@ def main() -> int:
             ok = ok and isinstance(raw, dict) and raw.get("type") == "need_navire"
         ok_all &= check(f"pas brief: {q[:42]}", ok)
 
+    raw_liste = try_sonasid_kpi_sql("liste des navires en déchargement") or ""
+    u_liste = str(raw_liste).upper()
+    ok_all &= check(
+        "liste navires déchargement → SQL détail",
+        "NAVIRE_NOM" in u_liste and "SELECT COUNT" not in u_liste,
+        str(raw_liste)[:90],
+    )
+
     print("\n=== 5. Questions ouvertes / vagues → brief ===")
     vague_cases = [
         ("situation au port cette année", "dashboard"),

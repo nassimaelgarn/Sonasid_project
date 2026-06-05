@@ -135,6 +135,27 @@ def build_natural_message(question: str, result: Any, *, ql: str = "") -> str:
                         lines.append("- " + " · ".join(parts))
                 return "\n".join(lines)
 
+            if re.search(r"\bd[eéè]charg", ql) and isinstance(first, dict) and first.get("navire"):
+                lines = ["**Navires en déchargement**", ""]
+                for row in result[:15]:
+                    nom = row.get("navire") or "—"
+                    ton = row.get("tonnage_arrivage")
+                    rest = row.get("quantite_restante")
+                    chunk = f"- **{nom}**"
+                    if row.get("arrivage_id") is not None:
+                        chunk += f" (arrivage {row.get('arrivage_id')})"
+                    extras = []
+                    if isinstance(ton, (int, float)):
+                        extras.append(f"{_fmt_num(ton)} t à bord")
+                    if isinstance(rest, (int, float)):
+                        extras.append(f"{_fmt_num(rest)} t restantes")
+                    if extras:
+                        chunk += " — " + ", ".join(extras)
+                    lines.append(chunk)
+                if len(result) > 15:
+                    lines.append(f"\n… et {len(result) - 15} autres lignes.")
+                return "\n".join(lines)
+
     if isinstance(result, (int, float)):
         label = "Résultat"
         if re.search(r"\barrivages?\b", ql):

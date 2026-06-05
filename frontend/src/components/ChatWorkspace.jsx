@@ -667,6 +667,8 @@ function isPeriodValueSeries(res) {
 function isScalarSonasidKpi(res) {
   if (!res || typeof res !== 'object' || res.error) return false
   if (isTableRows(res.result)) return false
+  const ql = String(res.question || '').toLowerCase()
+  if (/\b(liste|détail|detail|quels|quelles)\b/.test(ql)) return false
   return (
     typeof res.nombre_arrivages === 'number' ||
     typeof res.nombre_navires === 'number' ||
@@ -679,6 +681,7 @@ function isScalarSonasidKpi(res) {
 function wantsSonasidChartAugment(qLower) {
   const ql = String(qLower || '')
   if (/\bpar\s+(mois|jour|semaine|année|annee)\b/.test(ql)) return false
+  if (/\b(liste|détail|detail|quels|quelles)\b/.test(ql)) return false
   if (!looksLikeKpiQuestion(ql)) return false
   if (/\b(donne|donner|affiche|afficher|sql|requête|requete)\b/.test(ql)) return false
   return true

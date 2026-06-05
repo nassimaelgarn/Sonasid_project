@@ -187,6 +187,30 @@ def _build_monthly_series_message(
     return "\n".join(parts)
 
 
+def _build_dechargement_list_message(question: str, formatted: List[Dict[str, Any]]) -> str:
+    n = len(formatted)
+    lines = [f"**Navires en déchargement** — {n} navire(s) / arrivage(s)", ""]
+    for row in formatted[:15]:
+        nom = row.get("navire") or "—"
+        arr = row.get("arrivage_id")
+        ton = row.get("tonnage_arrivage")
+        rest = row.get("quantite_restante")
+        chunk = f"- **{nom}**"
+        if arr is not None:
+            chunk += f" (arrivage {arr})"
+        parts = []
+        if isinstance(ton, (int, float)):
+            parts.append(f"{_clean_num(ton)} t à bord")
+        if isinstance(rest, (int, float)):
+            parts.append(f"{_clean_num(rest)} t restantes")
+        if parts:
+            chunk += " · ".join(parts)
+        lines.append(chunk)
+    if n > 15:
+        lines.append(f"\n… et {n - 15} autres lignes (bouton « Voir les lignes »).")
+    return "\n".join(lines)
+
+
 def _format_rows(question_lower: str, rows):
     """
     Format SQLite rows for display:
@@ -1278,7 +1302,32 @@ def process_question(question):
                 series_out["message"] = _build_monthly_series_message(
                     question, formatted, metric_label="Tonnage"
                 )
+        elif (
+            re.search(r"\bd[eéè]charg", ql, re.I)
+            and re.search(r"\b(liste|détail|detail|quels|quelles)\b", ql)
+            and isinstance(formatted, list)
+            and formatted
+            and isinstance(formatted[0], dict)
+            and formatted[0].get("navire") is not None
+        ):
+            series_out["message"] = _build_dechargement_list_message(question, formatted)
         return attach_rewrite(series_out)
+
+    if (
+        re.search(r"\bd[eéè]charg", ql, re.I)
+        and re.search(r"\b(liste|détail|detail|quels|quelles)\b", ql)
+        and re.search(r"\bnavires?\b", ql)
+        and isinstance(result, list)
+        and not result
+    ):
+        return attach_rewrite(
+            {
+                "question": question,
+                "result": [],
+                "source": "sql:sonasid",
+                "message": "**Aucun navire en déchargement** actuellement (port à l’arrêt ou filtres trop stricts).",
+            }
+        )
 
     if _is_single_aggregate_row(result, sql) and re.search(
         r"\bnombre_arrivages\b", (sql or ""), re.I
@@ -1508,6 +1557,10 @@ def process_question(question):
                 )
     if re.search(r"\bnavires?\b", ql) and not re.search(r"\barrivages?\b", ql):
         if re.search(r"\btransf", ql) and re.search(r"\bqualit", ql, re.I):
+            pass
+        elif re.search(r"\bd[eéè]charg", ql, re.I) and re.search(
+            r"\b(liste|détail|detail|quels|quelles)\b", ql
+        ):
             pass
         elif re.search(r"\bd[eéè]charg", ql, re.I) and not re.search(
             r"\bnombre_navires_en_dechargement\b", (sql or ""), re.I
