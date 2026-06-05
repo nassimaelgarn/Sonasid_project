@@ -88,6 +88,8 @@ def extract_numeric_signals(data: Dict[str, Any]) -> List[float]:
         "Consommation_Oxygène",
         "Consommation_Carbon",
         "Consommation_GPL",
+        "nombre_arrivages",
+        "nombre_navires",
         "delta",
         "delta_percent",
     ):
@@ -136,6 +138,17 @@ def is_analysis_text_grounded(text: str, data: Dict[str, Any]) -> bool:
     if not t:
         return False
     return bool(re.search(r"\d", t))
+
+
+def deterministic_kpi_analyse_from_dict(data: Dict[str, Any]) -> str:
+    if not isinstance(data, dict):
+        return ""
+    try:
+        import json
+
+        return deterministic_kpi_analyse_text(json.dumps(data, ensure_ascii=False))
+    except Exception:
+        return ""
 
 
 def deterministic_kpi_analyse_text(body: str) -> str:
@@ -198,6 +211,10 @@ def deterministic_kpi_analyse_text(body: str) -> str:
         ("MTTR_secondes", "MTTR (secondes)"),
         ("Consommation_Totale", "Consommation totale"),
         ("Consommation_MWh", "Consommation (MWh)"),
+        ("tonnage_importe", "Tonnage importé"),
+        ("tonnage_total", "Tonnage total"),
+        ("nombre_arrivages", "Nombre d'arrivages"),
+        ("nombre_navires", "Navires"),
     ]
     found = False
     frag: List[str] = []

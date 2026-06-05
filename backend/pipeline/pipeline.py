@@ -165,6 +165,27 @@ def _format_rows(question_lower: str, rows):
                     {"periode": r[0], "tonnage_decharge": r[1], "value": r[1]}
                     for r in rows
                 ]
+        if re.search(r"\bfournisseur", question_lower) and len(first) >= 3:
+            if isinstance(first[0], (int, float)) and isinstance(first[1], str):
+                formatted: List[Dict[str, Any]] = []
+                for r in rows:
+                    row: Dict[str, Any] = {
+                        "fournisseur_id": r[0],
+                        "fournisseur": r[1],
+                        "nombre_arrivages": r[2],
+                        "value": r[2],
+                    }
+                    if len(r) > 3:
+                        row["tonnage_total"] = r[3]
+                    formatted.append(row)
+                return formatted
+        if len(first) == 3 and re.search(r"\bqualit", question_lower):
+            return [
+                {"qualite": r[0], "arrivages": r[1], "tonnage": r[2], "value": r[2]}
+                for r in rows
+            ]
+        if len(first) >= 3:
+            return [{"dim1": r[0], "dim2": r[1], "value": r[2]} for r in rows]
         return [{"categorie": r[0], "poids": r[1]} for r in rows]
 
     if isinstance(first, (list, tuple)) and len(first) == 1 and len(rows) > 1:
@@ -530,14 +551,39 @@ def process_question(question):
             out = dict(out)
             out["notice"] = sonasid_period_notice
         meta = kpi_rewrite_box.get("meta")
-        if not meta:
-            return out
-        out2 = dict(out)
-        out2["kpi_rewrite"] = meta
-        return out2
+        if meta:
+            out = dict(out)
+            out["kpi_rewrite"] = meta
+        try:
+            _prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
+            if _prof in {"sonasid", "shipping", "port"}:
+                from backend.llm.sonasid_narrative import enrich_sonasid_response
 
-    # Tolérance fautes / formulations (avant règles, SQL-only, fallback LLM, formatage).
-    question = normalize_kpi_question(q_in)
+                sql_used = out.get("tsql") or out.get("sql") or out.get("llm_sql") or ""
+                out = enrich_sonasid_response(
+                    out,
+                    question=str(out.get("question") or question),
+                    sql=str(sql_used) if sql_used else None,
+                )
+        except Exception:
+            pass
+        return out
+
+    _prof_pipe = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
+    _sonasid_pipe = _prof_pipe in {"sonasid", "shipping", "port"}
+
+    if _sonasid_pipe:
+        try:
+            from backend.llm.sonasid_brief import detect_sonasid_brief, execute_sonasid_brief
+
+            brief_hint = detect_sonasid_brief(q_in)
+            if brief_hint:
+                return attach_rewrite(execute_sonasid_brief(q_in, brief_hint["kind"]))
+        except Exception:
+            pass
+
+    q_for_sql = _strip_inline_analysis_verbs(q_in) if _sonasid_pipe else q_in
+    question = normalize_kpi_question(q_for_sql)
     sonasid_period_notice: Optional[str] = None
     try:
         from backend.llm.sonasid_sql import augment_sonasid_question_period
@@ -882,6 +928,7 @@ def process_question(question):
                 {
                     "question": question,
                     "result": _format_rows(question.lower(), llm_result),
+                    "tsql": llm_sql_fixed,
                     "source": f"llm:{provider}",
                     "llm_attempts": attempt + 1,
                 }
@@ -1216,11 +1263,43 @@ def process_question(question):
                     "notice": "Répartition des arrivages par qualité (via commandes liées).",
                 }
             )
+    if (
+        re.search(r"\bfournisseurs?\b", ql)
+        and isinstance(result, list)
+        and len(result) > 1
+        and result
+        and isinstance(result[0], (list, tuple))
+        and len(result[0]) >= 3
+    ):
+        formatted = _format_rows(ql, result)
+        if isinstance(formatted, list) and formatted and isinstance(formatted[0], dict):
+            lines = []
+            for i, row in enumerate(formatted[:10], 1):
+                nom = row.get("fournisseur") or "—"
+                n = row.get("nombre_arrivages") or row.get("value")
+                ton = row.get("tonnage_total")
+                if ton is not None:
+                    lines.append(f"{i}. **{nom}** — {_clean_num(n)} arrivages · {_clean_num(ton)} t")
+                else:
+                    lines.append(f"{i}. **{nom}** — {_clean_num(n)} arrivages")
+            return attach_rewrite(
+                {
+                    "question": question,
+                    "result": formatted,
+                    "source": "sql:sonasid",
+                    "formula": "Classement : COUNT(DISTINCT Arrivage_Id) + SUM(Arrivage_TonnageTotal) GROUP BY Fournisseur.",
+                    "message": "**Top fournisseurs par arrivages**\n" + "\n".join(lines),
+                }
+            )
     if re.search(r"\barrivages?\b", ql) and (
         re.search(r"\b(nombre|combien|count)\b", ql)
         or re.search(r"\bnombre_arrivages\b", (sql or ""), re.I)
     ):
         if re.search(r"\bqualit", ql, re.I):
+            pass
+        elif re.search(r"\bfournisseurs?\b", ql) and re.search(
+            r"\b(quels?|top|plus|classement|ranking|principal)\b", ql
+        ):
             pass
         elif "par mois" not in ql and "par semaine" not in ql and "par jour" not in ql and "tonnage" not in ql:
             n = int(value) if value == int(value) else value
@@ -1270,13 +1349,12 @@ def process_question(question):
                 "Je n’ai pas compris quel indicateur port calculer. "
                 "Peux-tu reformuler en précisant le KPI et la période ?\n"
                 "Exemples :\n"
-                "- nombre de navires actifs\n"
+                "- résumé de tous les KPI pour 2025\n"
+                "- analyse arrivages 2025 tous les axes\n"
+                "- quels fournisseurs ont le plus d'arrivages en 2025\n"
+                "- nombre de navires actifs par mois en 2025\n"
                 "- valeur des marchandises importées en 2025\n"
-                "- arrivages par qualité en 2025\n"
-                "- tonnage importé par qualité en 2025\n"
-                "- nombre d'arrivages en 2025\n"
-                "- arrivages par mois en 2025\n"
-                "- tonnage total des arrivages 2025"
+                "- arrivages par qualité en 2025"
             )
         else:
             msg = (

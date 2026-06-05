@@ -166,7 +166,32 @@ def _pick_arrivage_date_field(q_lower: str) -> str:
 
 
 def _needs_fournisseur_param(ql: str) -> bool:
-    return bool(re.search(r"\bfournisseur\b", ql))
+    if _is_fournisseur_ranking_question(ql):
+        return False
+    return bool(re.search(r"\bfournisseurs?\b", ql))
+
+
+def _is_fournisseur_ranking_question(ql: str) -> bool:
+    if not re.search(r"\bfournisseurs?\b", ql):
+        return False
+    if _fournisseur_predicate(ql):
+        return False
+    return bool(
+        re.search(r"\b(quels?|quelles?|top|classement|ranking|principal|principaux|meilleur)\b", ql)
+        or re.search(r"\b(plus|moins|maximum|maxi)\b", ql)
+        or re.search(r"\bpar fournisseur\b", ql)
+        or re.search(r"\blist(e|er)\b", ql)
+    )
+
+
+def _extract_top_n(ql: str, *, default: int = 10) -> int:
+    m = re.search(r"\btop\s*(\d+)\b", ql)
+    if m:
+        try:
+            return max(1, min(50, int(m.group(1))))
+        except ValueError:
+            pass
+    return default
 
 
 def _wants_transfert_qualite_detail(ql: str) -> bool:
@@ -699,8 +724,27 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
             f"ORDER BY periode;"
         )
 
-    # --- Nombre des arrivages par fournisseur (formule officielle) ---
-    if re.search(r"\barrivages?\b", ql) and re.search(r"\bfournisseur\b", ql):
+    # --- Classement fournisseurs (top arrivages / tonnage) ---
+    if _is_fournisseur_ranking_question(ql):
+        top_n = _extract_top_n(ql)
+        period = _optional_arrivage_period_clause(q, ql, alias="a")
+        where = _combine_where(period, "a.Arrivage_Actif = 1")
+        order = "nombre_arrivages DESC, tonnage_total DESC"
+        if re.search(r"\btonnage\b", ql) and not re.search(r"\barrivages?\b", ql):
+            order = "tonnage_total DESC, nombre_arrivages DESC"
+        return (
+            f"SELECT TOP {top_n} f.Fournisseur_Id, f.Fournisseur_Nom, "
+            f"COUNT(DISTINCT a.Arrivage_Id) AS nombre_arrivages, "
+            f"SUM(COALESCE(a.Arrivage_TonnageTotal, 0)) AS tonnage_total "
+            f"FROM {T_ARRIVAGE} a "
+            f"INNER JOIN {T_FOURNISSEUR} f ON a.Arrivage_FournisseurId = f.Fournisseur_Id "
+            f"{where} "
+            f"GROUP BY f.Fournisseur_Id, f.Fournisseur_Nom "
+            f"ORDER BY {order};"
+        )
+
+    # --- Nombre des arrivages par fournisseur (id ou nom requis) ---
+    if re.search(r"\barrivages?\b", ql) and re.search(r"\bfournisseurs?\b", ql):
         fourn = _fournisseur_predicate(ql)
         if not fourn:
             return _need_fournisseur_response()
@@ -708,8 +752,12 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
         where = _combine_where(fourn, period)
         return f"SELECT COUNT(*) AS nombre_arrivages FROM {T_ARRIVAGE} {where};"
 
-    # --- Arrivages avec année explicite ---
-    if re.search(r"\barrivages?\b", ql) and re.search(r"\b20\d{2}\b", ql):
+    # --- Arrivages avec année explicite (total, pas classement fournisseur) ---
+    if (
+        re.search(r"\barrivages?\b", ql)
+        and re.search(r"\b20\d{2}\b", ql)
+        and not re.search(r"\bfournisseurs?\b", ql)
+    ):
         if not re.search(r"\b(par mois|mensuel|chaque mois|mois par mois)\b", ql):
             if not re.search(r"\btonnage\b", ql):
                 df = _pick_arrivage_date_field(ql)

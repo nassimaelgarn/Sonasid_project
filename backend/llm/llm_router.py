@@ -181,6 +181,12 @@ def generate_sql_with_llm(question: str, *, extra_context: str = ""):
     """
     provider = os.getenv("LLM_PROVIDER", "llama").strip().lower()
 
+    profile = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
+    if profile in {"sonasid", "shipping", "port"}:
+        from backend.llm.sonasid_text_to_sql import generate_sonasid_sql_with_llm
+
+        return generate_sonasid_sql_with_llm(question, extra_context=extra_context)
+
     if provider in ("llama", "ollama"):
         sql, reason = _llama_generate(question, extra_context=extra_context)
         return sql, "llama", reason
