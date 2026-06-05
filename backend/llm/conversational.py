@@ -58,20 +58,43 @@ def _greeting_message(actor_name: str) -> str:
     first = name.split()[0] if name else ""
     prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
     if prof in {"sonasid", "shipping", "port"}:
-        hint = "Ex. : nombre de navires en déchargement, nombre des arrivages, tonnage importé fournisseur id 40."
-    else:
-        hint = "Ex. : production 2025, consommation électrique par mois."
+        if first:
+            return (
+                f"Bonjour {first}. "
+                "Assistant décisionnel **port & arrivages** — je croise vos données "
+                "(arrivages, tonnages, fournisseurs, qualités, navires) et réponds en langage naturel. "
+                "Indiquez une période si besoin, puis posez votre question."
+            )
+        return (
+            "Bonjour. Assistant décisionnel **port & arrivages** Sonasid. "
+            "Posez votre question en langage naturel ; précisez l’année ou la période pour affiner l’analyse."
+        )
     if first:
-        return f"Bonjour {first} ! Que veux-tu analyser ? {hint}"
-    return f"Bonjour ! Que veux-tu analyser ? {hint}"
+        return (
+            f"Bonjour {first}. "
+            "Je suis votre assistant KPI aciérie. "
+            "Indiquez l’indicateur et la période à analyser."
+        )
+    return "Bonjour. Je suis votre assistant KPI. Indiquez l’indicateur et la période à analyser."
 
 
 def _wellbeing_message(actor_name: str) -> str:
     name = (actor_name or "").strip()
-    base = "Ça va très bien, merci !"
-    if name:
-        return f"{base} Et toi, {name} ?"
-    return f"{base} Comment puis-je t’aider ?"
+    first = name.split()[0] if name else ""
+    prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
+    if prof in {"sonasid", "shipping", "port"}:
+        if first:
+            return (
+                f"Tout est opérationnel de mon côté, merci {first}. "
+                "Sur quoi souhaitez-vous vous appuyer — arrivages, tonnage, fournisseurs ou navires ?"
+            )
+        return (
+            "Tout est opérationnel. "
+            "Sur quoi souhaitez-vous vous appuyer — arrivages, tonnage, fournisseurs ou navires ?"
+        )
+    if first:
+        return f"Tout va bien, merci {first}. Quel KPI souhaitez-vous examiner ?"
+    return "Tout va bien, merci. Quel KPI souhaitez-vous examiner ?"
 
 
 def conversational_reply(
@@ -109,11 +132,11 @@ def conversational_reply(
     prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
     if prof in {"sonasid", "shipping", "port"}:
         domain = (
-            "Tu es l’assistant Sonasid (port & arrivages de matières premières). "
-            "Tu réponds en français, de façon professionnelle et chaleureuse.\n"
-            "Tu peux discuter de sujets généraux (logistique, maritime, douane, incoterms…) "
-            "sans inventer de chiffres précis : pour les KPI, invite l’utilisateur à poser "
-            "une question explicite (ex. nombre d'arrivages, tonnage par mois en 2025).\n"
+            "Tu es l’assistant décisionnel Sonasid (port & arrivages de matières premières). "
+            "Ton registre est professionnel, concis et orienté métier (logistique portuaire, supply chain).\n"
+            "Tu peux évoquer la logistique, le maritime ou la douane sans inventer de chiffres : "
+            "pour les données chiffrées, invite à formuler une question avec période et indicateur.\n"
+            "Ne liste pas d’exemples techniques sauf si l’utilisateur le demande.\n"
         )
     else:
         domain = (
@@ -127,7 +150,7 @@ def conversational_reply(
 
     sys = (
         domain
-        + "Réponds en **2 phrases maximum** (3 si indispensable). Pas de listes longues.\n"
+        + "Réponds en **2 à 3 phrases**, ton professionnel (vouvoiement). Pas de listes à puces.\n"
         + "Ne termine pas systématiquement par une question.\n"
         + "Ne réponds jamais par « Résultat: 1 ». N’exécute pas de SQL.\n"
     )

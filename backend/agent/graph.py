@@ -1045,8 +1045,9 @@ def node_chat(state: AgentState) -> AgentState:
         else:
             if _is_sonasid_profile():
                 text = (
-                    "Bonjour ! Je peux t’aider sur les navires, arrivages et tonnages "
-                    "(ex. navires actifs, arrivages en 2025, tonnage par mois)."
+                    "Bonjour. Assistant port & arrivages Sonasid — "
+                    "indiquez votre période et décrivez l’analyse souhaitée "
+                    "(arrivages, tonnage, fournisseurs, qualités, navires)."
                 )
             else:
                 text = "Bonjour ! Je peux t’aider à analyser tes KPI (production, consommations, TD/TR, MTBF/MTTR, rendement…). Dis-moi ce que tu veux regarder."
