@@ -416,6 +416,7 @@ def process_question(question):
         return {"question": q_in, "message": text, "source": "pipeline:analyse"}
 
     kpi_rewrite_box: Dict[str, Any] = {}
+    sonasid_period_notice: Optional[str] = None
 
     def _user_requests_inline_analysis(text: str) -> bool:
         t = (text or "").strip().lower()
@@ -584,7 +585,6 @@ def process_question(question):
 
     q_for_sql = _strip_inline_analysis_verbs(q_in) if _sonasid_pipe else q_in
     question = normalize_kpi_question(q_for_sql)
-    sonasid_period_notice: Optional[str] = None
     try:
         from backend.llm.sonasid_sql import augment_sonasid_question_period
 

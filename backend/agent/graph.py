@@ -149,6 +149,16 @@ def node_route(state: AgentState) -> AgentState:
     if _is_sql_request_text(q):
         return {"intent": "kpi", "kpi_question": q}
 
+    # Sonasid : brief multi-KPI / analyse multi-axes avant le moteur SQL unitaire.
+    if _is_sonasid_profile():
+        try:
+            from backend.llm.sonasid_brief import detect_sonasid_brief
+
+            if detect_sonasid_brief(q):
+                return {"intent": "kpi", "kpi_question": q}
+        except Exception:
+            pass
+
     # Sonasid : questions reconnues par le moteur métier → exécution KPI directe (pas de clarification LLM).
     if _is_sonasid_profile():
         try:
