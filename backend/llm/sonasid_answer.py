@@ -23,6 +23,28 @@ def user_requested_sql(question: str) -> bool:
     )
 
 
+def friendly_db_error(err: str) -> str:
+    """Message utilisateur sans dump ODBC ni SQL."""
+    text = str(err or "").strip()
+    if not text:
+        return "Impossible d'accéder aux données pour le moment."
+    if "--- SQL ---" in text:
+        text = text.split("--- SQL ---", 1)[0].strip()
+    low = text.lower()
+    if "40615" in text or "not allowed" in low or "firewall" in low:
+        m_ip = re.search(r"IP address '([\d.]+)'", text)
+        ip = m_ip.group(1) if m_ip else "votre réseau"
+        return (
+            f"**Connexion à la base impossible** (pare-feu Azure SQL).\n\n"
+            f"L'accès depuis **{ip}** n'est pas autorisé.\n\n"
+            "→ Testez sur **sonasid-alexsys.westeurope.cloudapp.azure.com:5175** (VM prod),\n"
+            "→ ou demandez à un admin d'ajouter cette IP dans le pare-feu du serveur `sql-son-prd`."
+        )
+    if len(text) > 280:
+        return "Impossible d'exécuter la requête sur Azure SQL. Vérifiez la connexion prod ou le pare-feu."
+    return text
+
+
 def _fmt_num(v: Any) -> str:
     try:
         x = float(v)
@@ -133,8 +155,15 @@ def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]
     if not _is_sonasid_profile() or not isinstance(out, dict):
         return out
     if out.get("error") and out.get("message"):
+        out = dict(out)
+        out.pop("formula", None)
+        out.pop("tsql", None)
+        out.pop("sql", None)
         return out
+
     if str(out.get("source") or "").startswith("sonasid:brief"):
+        out = dict(out)
+        out.pop("formula", None)
         return out
 
     show_sql = user_requested_sql(question)

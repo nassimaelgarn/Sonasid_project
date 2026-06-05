@@ -386,8 +386,10 @@ def run_query(sql):
                 return [list(r) for r in rows]
         except Exception as e:
             msg = str(e) or repr(e)
-            # Return the executed SQL to help debug dialect/schema issues.
-            return f"{msg}\n\n--- SQL ---\n{tsql}"
+            debug = os.getenv("SQL_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+            if debug:
+                return f"{msg}\n\n--- SQL ---\n{tsql}"
+            return msg
 
     # Default: SQLite local
     conn = sqlite3.connect(db_path)

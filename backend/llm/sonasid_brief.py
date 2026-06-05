@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.database.run_query import run_query
 from backend.llm.llm_sql import normalize_kpi_question
+from backend.llm.sonasid_answer import friendly_db_error
 from backend.llm.sonasid_sql import (
     T_ARRIVAGE,
     T_COMMANDE,
@@ -123,13 +124,6 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
         "",
     ]
     all_rows: List[Dict[str, Any]] = []
-    formulas = [
-        "- **Navires actifs** : `COUNT(*)` sur `NAVIRE` où `Navire_Active = 1`",
-        "- **Arrivages** : `COUNT(*)` sur `ARRIVAGE` (filtre année sur `Arrivage_DateCreation`)",
-        "- **Tonnage importé** : `SUM(Arrivage_TonnageTotal)`",
-        "- **Par qualité** : agrégats via `COMMANDE` → `QUALITE`",
-        "- **Tonnage transféré** : `SUM(Transfert_PoidsNet)` via `TRANSFERT` → `COMMANDE`",
-    ]
 
     for year in years:
         df = "Arrivage_DateCreation"
@@ -157,8 +151,15 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
 
         lines.append(f"### Année {year}")
         if err:
-            lines.append(f"- Erreur SQL : {err}")
-            continue
+            lines.append(friendly_db_error(err))
+            return {
+                "question": question,
+                "source": "sonasid:brief",
+                "brief_kind": "dashboard",
+                "years": years,
+                "error": "DB_FIREWALL" if "40615" in str(err) or "not allowed" in str(err).lower() else "DB_ERROR",
+                "message": "\n".join(lines).strip(),
+            }
         lines.extend(
             [
                 f"- **Navires actifs (référentiel)** : {_fmt_num(nav_actifs or 0)}",
@@ -220,16 +221,12 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
                 lines.append(f"- {mo} : {_fmt_num(n)}")
             lines.append("")
 
-    lines.append("**Formules de référence**")
-    lines.extend(formulas)
-
     return {
         "question": question,
         "source": "sonasid:brief",
         "brief_kind": "dashboard",
         "years": years,
         "result": all_rows,
-        "formula": "Brief multi-KPI : agrégats ARRIVAGE / COMMANDE / TRANSFERT / NAVIRE.",
         "message": "\n".join(lines).strip(),
     }
 
@@ -262,8 +259,17 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
 
         lines.append(f"### {year} — vue globale")
         if err:
-            lines.append(f"- Erreur : {err}")
-            continue
+            return {
+                "question": question,
+                "source": "sonasid:brief",
+                "brief_kind": "arrivages_analysis",
+                "years": years,
+                "error": "DB_FIREWALL" if "40615" in str(err) or "not allowed" in str(err).lower() else "DB_ERROR",
+                "message": "\n".join(
+                    lines
+                    + ["", friendly_db_error(err)]
+                ).strip(),
+            }
         lines.extend(
             [
                 f"- **Arrivages** : {_fmt_num(n_arr or 0)}",
@@ -346,16 +352,6 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
                 )
             lines.append("")
 
-    lines.extend(
-        [
-            "**Formules utilisées**",
-            "- Arrivages : `COUNT(DISTINCT Arrivage_Id)` ou `COUNT(*)` sur `ARRIVAGE`",
-            "- Tonnage importé : `SUM(Arrivage_TonnageTotal)`",
-            "- Tonnage commandé par qualité : `SUM(Commande_Tonnage)` via `COMMANDE` + `QUALITE`",
-            "- Fournisseur : jointure `ARRIVAGE` → `FOURNISSEUR`",
-        ]
-    )
-
     out: Dict[str, Any] = {
         "question": question,
         "source": "sonasid:brief",
@@ -363,7 +359,6 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
         "years": years,
         "result": series_monthly if series_monthly else all_rows,
         "sections": all_rows,
-        "formula": "Analyse multi-axes : globale + mensuelle + qualité + fournisseur.",
         "message": "\n".join(lines).strip(),
     }
     if series_monthly:
