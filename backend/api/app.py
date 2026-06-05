@@ -313,6 +313,9 @@ def _run_chat_pipeline(
             is_pure_greeting,
             should_use_kpi_pipeline,
         )
+        from backend.llm.llm_sql import normalize_user_question
+
+        question = normalize_user_question(question)
 
         # Salutations courtes — jamais via SQL ni long LLM (Trinity, etc.)
         if is_pure_greeting(question):

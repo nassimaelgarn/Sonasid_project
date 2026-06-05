@@ -70,7 +70,9 @@ def _active_arrivage(extra: str = "") -> str:
 def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
     if not _sonasid_profile_active():
         return None
-    ql = re.sub(r"\s+", " ", (question or "").lower()).strip()
+    from backend.llm.llm_sql import normalize_user_question
+
+    ql = re.sub(r"\s+", " ", normalize_user_question(question or "").lower()).strip()
 
     if re.search(r"\b(kpi|kip|indicateurs?)\b", ql) and re.search(
         r"\b(résumé|resume|recap|récap|synthèse|synthese|tableau de bord|donne|donne-moi|tous|ensemble|global|principaux?|l'ensemble)\b",

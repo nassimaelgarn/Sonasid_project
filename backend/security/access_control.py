@@ -26,7 +26,9 @@ def looks_like_kpi_question(text: str) -> bool:
     Important: a bare year/date should NOT be enough to qualify as KPI, otherwise RBAC
     would affect general conversation (bad UX).
     """
-    t = (text or "").lower()
+    from backend.llm.llm_sql import normalize_user_question
+
+    t = normalize_user_question(text or "").lower()
     if not t.strip():
         return False
     # KPI/metric keywords (aciérie + Sonasid port / arrivages)

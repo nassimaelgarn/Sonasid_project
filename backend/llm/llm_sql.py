@@ -72,6 +72,17 @@ def normalize_kpi_question(question: str) -> str:
     for pat, rep in typo_pairs:
         q = re.sub(pat, rep, q, flags=re.IGNORECASE)
 
+    try:
+        import os
+
+        prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
+        if prof in {"sonasid", "shipping", "port"}:
+            from backend.llm.sonasid_typo import apply_sonasid_typos
+
+            q = apply_sonasid_typos(q)
+    except Exception:
+        pass
+
     ql = q.lower()
 
     # prod (mot entier) → production si pas déjà présent
@@ -153,6 +164,11 @@ def normalize_kpi_question(question: str) -> str:
                 ql = q.lower()
 
     return q.strip()
+
+
+def normalize_user_question(question: str) -> str:
+    """Point d'entrée unique : fautes, accents, synonymes avant tout routage."""
+    return normalize_kpi_question(question)
 
 
 def _extract_grade(question_lower):

@@ -34,7 +34,9 @@ def is_pure_greeting(text: str) -> bool:
 
 def should_use_kpi_pipeline(text: str) -> bool:
     """True → exécuter process_question / SQL ; False → conversation LLM."""
-    t = (text or "").strip()
+    from backend.llm.llm_sql import normalize_user_question
+
+    t = normalize_user_question((text or "").strip())
     if not t:
         return False
     if is_pure_greeting(t):
