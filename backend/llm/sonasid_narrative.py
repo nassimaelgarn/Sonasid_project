@@ -56,9 +56,19 @@ def enrich_sonasid_response(
         out.pop("formula", None)
         return out
 
-    synth = deterministic_kpi_analyse_from_dict(out)
-    if not synth:
-        synth = _minimal_sonasid_synth(out)
+    skip_auto_synth = False
+    try:
+        from backend.llm.sonasid_open import is_sonasid_llm_narrate
+
+        skip_auto_synth = is_sonasid_llm_narrate() and not out.get("message")
+    except Exception:
+        pass
+
+    synth = ""
+    if not skip_auto_synth:
+        synth = deterministic_kpi_analyse_from_dict(out)
+        if not synth:
+            synth = _minimal_sonasid_synth(out)
 
     parts = []
     if formula:

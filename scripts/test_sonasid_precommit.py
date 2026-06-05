@@ -70,6 +70,14 @@ def main() -> int:
             "arrivages par qualité en 2025",
             lambda u: "QUALITE" in u and "GROUP BY" in u,
         ),
+        (
+            "quels navires ont le plus de tonnage transféré en 2025 ?",
+            lambda u: "NAVIRE" in u
+            and "TRANSFERT" in u
+            and "GROUP BY" in u
+            and "TONNAGE_TRANSFERE" in u.replace(" ", "")
+            and "SUM(ARRIVAGE_TONNAGETOTAL)" not in u,
+        ),
     ]
     for q, pred in cases:
         raw = try_sonasid_kpi_sql(q) or generate_sql(q)
@@ -135,6 +143,25 @@ def main() -> int:
         sql = extract_sql(raw) if isinstance(raw, str) else str(raw or "")
         ok = should_use_kpi_pipeline(q) == kpi and needle in (expanded + " " + sql)
         ok_all &= check(q[:42], ok, expanded[:60])
+
+    print("\n=== 7. Mode Sonasid ouvert (LLM-first) ===")
+    from backend.llm.sonasid_open import (
+        is_sonasid_llm_first,
+        is_sonasid_open_mode,
+        looks_like_sonasid_data_question,
+    )
+
+    ok_all &= check("mode ouvert actif", is_sonasid_open_mode())
+    ok_all &= check(
+        "question créative → domaine port",
+        looks_like_sonasid_data_question("est-ce que le port était chargé l'été dernier ?"),
+    )
+    ok_all &= check(
+        "LLM-first désactivé par défaut (rules first)",
+        not is_sonasid_llm_first()
+        or (os.getenv("SONASID_LLM_FIRST") or "").strip().lower() in {"1", "true", "yes", "on"},
+        f"first={is_sonasid_llm_first()}",
+    )
 
     print("\n=== Résultat ===")
     if ok_all:

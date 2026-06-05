@@ -281,6 +281,21 @@ def _format_rows(question_lower: str, rows):
                         row["tonnage_total"] = r[3]
                     formatted.append(row)
                 return formatted
+        if re.search(r"\bnavires?\b", question_lower) and len(first) >= 3:
+            if isinstance(first[0], (int, float)) and isinstance(first[1], str):
+                nav_rows: List[Dict[str, Any]] = []
+                for r in rows:
+                    nav_row: Dict[str, Any] = {
+                        "navire_id": r[0],
+                        "navire": r[1],
+                        "value": r[2],
+                    }
+                    if re.search(r"\btransf", question_lower):
+                        nav_row["tonnage_transfere"] = r[2]
+                    else:
+                        nav_row["tonnage_importe"] = r[2]
+                    nav_rows.append(nav_row)
+                return nav_rows
         if len(first) == 3 and re.search(r"\bqualit", question_lower):
             return [
                 {"qualite": r[0], "arrivages": r[1], "tonnage": r[2], "value": r[2]}
@@ -759,11 +774,17 @@ def process_question(question):
             }
         )
 
-    # Reformulation LLM (cloud et/ou local) si le moteur de règles ne reconnaît pas la question.
+    # Reformulation LLM (aciérie) — désactivée par défaut en mode Sonasid ouvert.
+    try:
+        from backend.llm.sonasid_open import is_sonasid_kpi_rewrite_enabled
+
+        _rewrite_on = is_sonasid_kpi_rewrite_enabled()
+    except Exception:
+        _rewrite_on = is_kpi_rewrite_enabled()
     if (
         isinstance(raw, str)
         and extract_sql(raw).strip().upper() == "SELECT 1"
-        and is_kpi_rewrite_enabled()
+        and _rewrite_on
         and not _open_expanded
     ):
         rag_ctx = ""
@@ -801,11 +822,19 @@ def process_question(question):
         _needs_period = sonasid_kpi_requires_period(question)
     except Exception:
         pass
+    try:
+        from backend.llm.sonasid_open import is_sonasid_llm_first
+
+        _llm_first = is_sonasid_llm_first()
+    except Exception:
+        _llm_first = False
     if (
         os.getenv("KPI_REQUIRE_EXPLICIT_PERIOD", "true").strip().lower() in {"1", "true", "yes", "on"}
         and _kpi_raw_executable(raw)
         and _needs_period
         and not question_has_explicit_period(question)
+        and not _llm_first
+        and not _open_expanded
     ):
         _y = datetime.now().year
         _sonasid = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower() in {
@@ -994,8 +1023,13 @@ def process_question(question):
         return attach_rewrite({"question": question, "error": "Réponse pipeline invalide"})
 
     # ========== CAS 0 : FALLBACK LLM (si règle non trouvée) ==========
-    # On garde le moteur rule-based prioritaire pour la stabilité production.
-    if isinstance(raw, str) and extract_sql(raw).strip().upper() == "SELECT 1" and is_llm_enabled():
+    try:
+        from backend.llm.sonasid_open import is_sonasid_llm_available
+
+        _llm_ok = is_llm_enabled() or is_sonasid_llm_available()
+    except Exception:
+        _llm_ok = is_llm_enabled()
+    if isinstance(raw, str) and extract_sql(raw).strip().upper() == "SELECT 1" and _llm_ok:
         rag_ctx = ""
         try:
             rag_ctx = build_rag_context(question=question, session_id=session_id)
@@ -1052,15 +1086,15 @@ def process_question(question):
                 )
             except Exception:
                 pass
-            return attach_rewrite(
-                {
-                    "question": question,
-                    "result": _format_rows(question.lower(), llm_result),
-                    "tsql": llm_sql_fixed,
-                    "source": f"llm:{provider}",
-                    "llm_attempts": attempt + 1,
-                }
-            )
+            formatted = _format_rows(question.lower(), llm_result)
+            llm_out: Dict[str, Any] = {
+                "question": question,
+                "result": formatted,
+                "tsql": llm_sql_fixed,
+                "source": f"llm:{provider}",
+                "llm_attempts": attempt + 1,
+            }
+            return attach_rewrite(llm_out)
 
         if not llm_meta:
             llm_meta = {"llm_status": "llm_failed", "llm_reason": last_reason, "llm_provider": provider if 'provider' in locals() else None}
@@ -1483,6 +1517,30 @@ def process_question(question):
                     "result": formatted,
                     "source": "sql:sonasid",
                     "message": "**Top fournisseurs par arrivages**\n" + "\n".join(lines),
+                }
+            )
+    if (
+        re.search(r"\bnavires?\b", ql)
+        and re.search(r"\btransf", ql)
+        and isinstance(result, list)
+        and len(result) > 1
+        and result
+        and isinstance(result[0], (list, tuple))
+        and len(result[0]) >= 3
+    ):
+        formatted = _format_rows(ql, result)
+        if isinstance(formatted, list) and formatted and isinstance(formatted[0], dict):
+            lines = []
+            for i, row in enumerate(formatted[:10], 1):
+                nom = row.get("navire") or "—"
+                ton = row.get("tonnage_transfere") or row.get("value")
+                lines.append(f"{i}. **{nom}** — {_clean_num(ton)} t transférées")
+            return attach_rewrite(
+                {
+                    "question": question,
+                    "result": formatted,
+                    "source": "sql:sonasid",
+                    "message": "**Top navires par tonnage transféré**\n" + "\n".join(lines),
                 }
             )
     if re.search(r"\barrivages?\b", ql) and (

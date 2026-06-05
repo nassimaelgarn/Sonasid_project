@@ -43,6 +43,13 @@ def should_use_kpi_pipeline(text: str) -> bool:
         return False
     if is_same_kpi_followup_text(t):
         return True
+    try:
+        from backend.llm.sonasid_open import is_sonasid_profile, looks_like_sonasid_data_question
+
+        if is_sonasid_profile() and looks_like_sonasid_data_question(t):
+            return True
+    except Exception:
+        pass
     if looks_like_kpi_question(t):
         return True
     tl = t.lower()

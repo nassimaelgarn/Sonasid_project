@@ -764,32 +764,63 @@ def _base_arrêts():
 
 
 def generate_sql(question):
+    q = normalize_kpi_question(question)
+    db_provider = (os.getenv("DB_PROVIDER", "sqlite") or "sqlite").strip().lower()
+    profile = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
+    is_sonasid_azure = db_provider in {"azure", "mssql", "sqlserver"} and profile in {
+        "sonasid",
+        "shipping",
+        "port",
+    }
+
+    def _try_open_llm_sql(qtext: str) -> Optional[str]:
+        try:
+            from backend.llm.llm_router import generate_sql_with_llm
+            from backend.llm.sql_guard import validate_sonasid_select_sql
+
+            llm_sql, _prov, _reason = generate_sql_with_llm(qtext)
+            if not llm_sql:
+                return None
+            sql_only = extract_sql(llm_sql).strip()
+            if not sql_only or sql_only.upper() == "SELECT 1":
+                return None
+            ok, _ = validate_sonasid_select_sql(sql_only)
+            return sql_only if ok else None
+        except Exception:
+            return None
+
+    if is_sonasid_azure:
+        try:
+            from backend.llm.sonasid_open import is_sonasid_llm_first
+
+            if is_sonasid_llm_first():
+                llm_sql = _try_open_llm_sql(q)
+                if llm_sql:
+                    return llm_sql
+        except Exception:
+            pass
+
     try:
         from backend.llm.sonasid_sql import try_sonasid_kpi_sql
 
-        son = try_sonasid_kpi_sql(question)
+        son = try_sonasid_kpi_sql(q)
         if son:
             return son
     except Exception:
         pass
 
-    q = normalize_kpi_question(question)
     question_lower = q.lower()
 
-    db_provider = (os.getenv("DB_PROVIDER", "sqlite") or "sqlite").strip().lower()
-    profile = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
-    if db_provider in {"azure", "mssql", "sqlserver"} and profile in {"sonasid", "shipping", "port"}:
-        open_llm = os.getenv("SONASID_OPEN_LLM", "true").strip().lower() in {"1", "true", "yes", "on"}
-        if open_llm:
-            try:
-                from backend.llm.llm_router import is_llm_enabled, generate_sql_with_llm
+    if is_sonasid_azure:
+        try:
+            from backend.llm.sonasid_open import is_sonasid_open_mode, is_sonasid_llm_available
 
-                if is_llm_enabled():
-                    llm_sql, _prov, _reason = generate_sql_with_llm(question)
-                    if llm_sql and extract_sql(llm_sql).strip().upper() != "SELECT 1":
-                        return llm_sql
-            except Exception:
-                pass
+            if is_sonasid_open_mode() and is_sonasid_llm_available():
+                llm_sql = _try_open_llm_sql(q)
+                if llm_sql:
+                    return llm_sql
+        except Exception:
+            pass
         return "SELECT 1"
     grade = _extract_grade(question_lower)
     date = _extract_date(q)

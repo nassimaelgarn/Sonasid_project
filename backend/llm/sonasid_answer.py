@@ -3,6 +3,7 @@ Réponses utilisateur Sonasid : langage naturel, SQL interne uniquement.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -147,6 +148,86 @@ def build_natural_message(question: str, result: Any, *, ql: str = "") -> str:
     return ""
 
 
+def _compact_result_for_narration(result: Any, *, max_rows: int = 20) -> Any:
+    if isinstance(result, list):
+        rows = [r for r in result if isinstance(r, dict)][:max_rows]
+        if rows:
+            return rows
+        return result[:max_rows]
+    if isinstance(result, (int, float)):
+        return result
+    return result
+
+
+def narrate_sql_result(
+    question: str,
+    result: Any,
+    *,
+    model_name: str = "",
+) -> str:
+    """
+    Réponse naturelle à partir des données SQL (Flash / OpenRouter).
+    Ne s'active que si SONASID_LLM_NARRATE=true et LLM disponible.
+    """
+    try:
+        from backend.llm.sonasid_open import is_sonasid_llm_narrate
+
+        if not is_sonasid_llm_narrate():
+            return ""
+    except Exception:
+        return ""
+
+    compact = _compact_result_for_narration(result)
+    if compact is None or compact == [] or compact == "":
+        return ""
+
+    fallback = build_natural_message(question, result, ql=(question or "").lower())
+    payload = json.dumps(compact, ensure_ascii=False, default=str)
+    if len(payload) > 5000:
+        payload = payload[:5000] + "…"
+
+    sys = (
+        "Tu es l'assistant décisionnel Sonasid (port & arrivages de matières premières).\n"
+        "Réponds en français, ton professionnel et clair (2 à 5 phrases ou puces courtes).\n"
+        "Interprète la question librement : tendance, comparaison, point clé, alerte si utile.\n"
+        "Base-toi UNIQUEMENT sur les données JSON fournies. N'invente aucun chiffre.\n"
+        "Ne montre jamais de SQL, de formule technique, ni de mention « synthèse automatique ».\n"
+    )
+    prompt = (
+        f"{sys}\n\nQuestion utilisateur :\n{question.strip()}\n\n"
+        f"Données (résultat requête) :\n{payload}\n"
+    )
+
+    text = ""
+    try:
+        from backend.agent.llm import invoke_chat_text
+
+        models: List[str] = []
+        for mn in (
+            (model_name or "").strip(),
+            (os.getenv("SONASID_NARRATE_MODEL", "") or "").strip(),
+            (os.getenv("OPENROUTER_CHAT_FALLBACK", "") or "").strip(),
+            "flash",
+        ):
+            if mn and mn not in models:
+                models.append(mn)
+        for mn in models:
+            try:
+                text = (invoke_chat_text(prompt=prompt, model_name=mn) or "").strip()
+            except Exception:
+                text = ""
+            if text:
+                break
+    except Exception:
+        text = ""
+
+    if not text:
+        return fallback or ""
+    if fallback and not re.search(r"\d", text):
+        return f"{text}\n\n{fallback}"
+    return text
+
+
 def user_requested_formula(question: str) -> bool:
     ql = (question or "").lower()
     return bool(
@@ -219,7 +300,18 @@ def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]
                 result = out[k]
                 break
 
-    msg = build_natural_message(question, result, ql=(question or "").lower())
+    q_for_msg = str(out.get("question") or question)
+    src = str(out.get("source") or "")
+    if src.startswith("llm:") or (
+        src.startswith("sql:") and not out.get("message")
+    ):
+        narrated = narrate_sql_result(q_for_msg, result)
+        if narrated:
+            out = dict(out)
+            out["message"] = narrated
+            return out
+
+    msg = build_natural_message(q_for_msg, result, ql=(question or "").lower())
     if msg:
         out = dict(out)
         out["message"] = msg

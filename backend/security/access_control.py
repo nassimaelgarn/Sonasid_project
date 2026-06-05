@@ -31,6 +31,13 @@ def looks_like_kpi_question(text: str) -> bool:
     t = normalize_user_question(text or "").lower()
     if not t.strip():
         return False
+    try:
+        from backend.llm.sonasid_open import is_sonasid_profile, looks_like_sonasid_data_question
+
+        if is_sonasid_profile() and looks_like_sonasid_data_question(text or ""):
+            return True
+    except Exception:
+        pass
     # KPI/metric keywords (aciérie + Sonasid port / arrivages)
     keywords = [
         "kpi",

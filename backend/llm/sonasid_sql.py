@@ -282,6 +282,19 @@ def _is_fournisseur_ranking_question(ql: str) -> bool:
     )
 
 
+def _is_navire_ranking_question(ql: str) -> bool:
+    if not re.search(r"\bnavires?\b", ql):
+        return False
+    if _navire_predicate(ql):
+        return False
+    return bool(
+        re.search(r"\b(quels?|quelles?|top|classement|ranking|principal|principaux|meilleur)\b", ql)
+        or re.search(r"\b(plus|moins|maximum|maxi)\b", ql)
+        or re.search(r"\bpar navire\b", ql)
+        or re.search(r"\blist(e|er)\b", ql)
+    )
+
+
 def _extract_top_n(ql: str, *, default: int = 10) -> int:
     m = re.search(r"\btop\s*(\d+)\b", ql)
     if m:
@@ -316,6 +329,8 @@ def _is_tonnage_importe_question(ql: str) -> bool:
 
 
 def _needs_navire_param(ql: str) -> bool:
+    if _is_navire_ranking_question(ql):
+        return False
     return bool(
         re.search(r"\bnavire\b", ql)
         and re.search(r"\btransf", ql)
@@ -822,6 +837,49 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
             f"ORDER BY periode;"
         )
 
+    # --- Classement navires (top tonnage transféré) ---
+    if _is_navire_ranking_question(ql) and re.search(r"\btransf", ql):
+        top_n = _extract_top_n(ql)
+        period = _optional_arrivage_period_clause(q, ql, alias="a")
+        if not period and re.search(r"\b20\d{2}\b", ql):
+            df = _pick_arrivage_date_field(ql)
+            w = _tsql_where_range(df, q, allow_default_year=False)
+            period = w[6:].strip() if w.upper().startswith("WHERE ") else ""
+        where = _combine_where(period, "t.Transfert_Actif = 1")
+        return (
+            f"SELECT TOP {top_n} nv.Navire_Id, nv.Navire_Nom, "
+            f"SUM(t.Transfert_PoidsNet) AS tonnage_transfere "
+            f"FROM {T_TRANSFERT} t "
+            f"INNER JOIN {T_COMMANDE} c ON t.Transfert_CommandeId = c.Commande_Id "
+            f"INNER JOIN {T_ARRIVAGE} a ON c.Commande_ArrivageId = a.Arrivage_Id "
+            f"INNER JOIN {T_NOMINATION} nn ON a.Arrivage_Id = nn.NominationNavire_ArrivageId "
+            f"INNER JOIN {T_NAVIRE} nv ON nn.NominationNavire_NavireId = nv.Navire_Id "
+            f"{where} "
+            f"GROUP BY nv.Navire_Id, nv.Navire_Nom "
+            f"ORDER BY tonnage_transfere DESC, nv.Navire_Nom;"
+        )
+
+    # --- Classement navires (top tonnage importé, sans mot « transféré ») ---
+    if (
+        _is_navire_ranking_question(ql)
+        and re.search(r"\btonnage\b", ql)
+        and not re.search(r"\btransf", ql)
+        and not re.search(r"\bqual", ql)
+    ):
+        top_n = _extract_top_n(ql)
+        period = _optional_arrivage_period_clause(q, ql, alias="a")
+        where = _combine_where(period, "a.Arrivage_Actif = 1")
+        return (
+            f"SELECT TOP {top_n} nv.Navire_Id, nv.Navire_Nom, "
+            f"SUM(COALESCE(a.Arrivage_TonnageTotal, 0)) AS tonnage_importe "
+            f"FROM {T_ARRIVAGE} a "
+            f"INNER JOIN {T_NOMINATION} nn ON a.Arrivage_Id = nn.NominationNavire_ArrivageId "
+            f"INNER JOIN {T_NAVIRE} nv ON nn.NominationNavire_NavireId = nv.Navire_Id "
+            f"{where} "
+            f"GROUP BY nv.Navire_Id, nv.Navire_Nom "
+            f"ORDER BY tonnage_importe DESC, nv.Navire_Nom;"
+        )
+
     # --- Classement fournisseurs (top arrivages / tonnage) ---
     if _is_fournisseur_ranking_question(ql):
         top_n = _extract_top_n(ql)
@@ -894,8 +952,12 @@ def try_sonasid_kpi_sql(question: str) -> Optional[SonasidSqlResult]:
         )
 
     # --- Tonnage global avec période (POC) ---
-    if re.search(r"\btonnage\b", ql) and not re.search(r"\bfournisseur\b", ql) and not re.search(
-        r"\bqual", ql
+    if (
+        re.search(r"\btonnage\b", ql)
+        and not re.search(r"\bfournisseur\b", ql)
+        and not re.search(r"\bqual", ql)
+        and not re.search(r"\btransf", ql)
+        and not _is_navire_ranking_question(ql)
     ):
         df = _pick_arrivage_date_field(ql)
         w = _tsql_where_range(
