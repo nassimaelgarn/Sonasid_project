@@ -5,12 +5,11 @@ export const SONASID_TAGLINE = 'Assistant décisionnel — port & arrivages'
 export function buildSonasidWelcomeText(actorName) {
   const name = String(actorName || '').trim()
   const first = name.split(/\s+/)[0] || ''
-  const greet = first ? `Bonjour ${first}.` : 'Bonjour.'
+  const greet = first
+    ? `Bonjour ${first}, bienvenue dans l'assistant IA Sonasid.`
+    : "Bonjour, bienvenue dans l'assistant IA Sonasid."
   const y = String(new Date().getFullYear())
-  return (
-    `${greet} Posez votre question sur les arrivages, tonnages, fournisseurs, qualités ou navires.\n\n` +
-    `Exemples : résumé KPI ${y} · top fournisseurs ${y} · arrivages par mois ${y}.`
-  )
+  return `${greet}\n\nJe serai ravi de t'aider. Ex. : résumé KPI ${y}, top fournisseurs, arrivages par mois.`
 }
 
 export const SONASID_WELCOME_HINT =

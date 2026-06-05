@@ -59,19 +59,28 @@ def _greeting_message(actor_name: str) -> str:
     prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
     if prof in {"sonasid", "shipping", "port"}:
         if first:
-            return f"Bonjour {first}. Que souhaitez-vous analyser sur le port et les arrivages ?"
-        return "Bonjour. Que souhaitez-vous analyser sur le port et les arrivages ?"
+            return (
+                f"Bonjour {first}, bienvenue dans l'assistant IA Sonasid. "
+                "Je serai ravi de t'aider — que veux-tu savoir ?"
+            )
+        return (
+            "Bonjour, bienvenue dans l'assistant IA Sonasid. "
+            "Je serai ravi de t'aider — que veux-tu savoir ?"
+        )
     if first:
-        return f"Bonjour {first}. Quel indicateur souhaitez-vous consulter ?"
-    return "Bonjour. Quel indicateur souhaitez-vous consulter ?"
+        return (
+            f"Bonjour {first}, bienvenue dans l'assistant IA. "
+            "Je serai ravi de t'aider — que veux-tu savoir ?"
+        )
+    return "Bonjour, bienvenue. Je serai ravi de t'aider — que veux-tu savoir ?"
 
 
 def _wellbeing_message(actor_name: str) -> str:
     name = (actor_name or "").strip()
     first = name.split()[0] if name else ""
     if first:
-        return f"Très bien, merci {first}. Comment puis-je vous aider ?"
-    return "Très bien, merci. Comment puis-je vous aider ?"
+        return f"Ça va très bien, merci {first} ! Et toi ? Que veux-tu analyser ?"
+    return "Ça va très bien, merci ! Que veux-tu analyser ?"
 
 
 def conversational_reply(
