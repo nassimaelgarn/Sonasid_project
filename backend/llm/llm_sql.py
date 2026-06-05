@@ -675,6 +675,17 @@ def generate_sql(question):
     db_provider = (os.getenv("DB_PROVIDER", "sqlite") or "sqlite").strip().lower()
     profile = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
     if db_provider in {"azure", "mssql", "sqlserver"} and profile in {"sonasid", "shipping", "port"}:
+        open_llm = os.getenv("SONASID_OPEN_LLM", "true").strip().lower() in {"1", "true", "yes", "on"}
+        if open_llm:
+            try:
+                from backend.llm.llm_router import is_llm_enabled, generate_sql_with_llm
+
+                if is_llm_enabled():
+                    llm_sql, _prov, _reason = generate_sql_with_llm(question)
+                    if llm_sql and extract_sql(llm_sql).strip().upper() != "SELECT 1":
+                        return llm_sql
+            except Exception:
+                pass
         return "SELECT 1"
     grade = _extract_grade(question_lower)
     date = _extract_date(q)

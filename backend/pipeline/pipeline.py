@@ -572,6 +572,7 @@ def process_question(question):
             _prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
             if _prof in {"sonasid", "shipping", "port"}:
                 from backend.llm.sonasid_narrative import enrich_sonasid_response
+                from backend.llm.sonasid_answer import finalize_user_response
 
                 sql_used = out.get("tsql") or out.get("sql") or out.get("llm_sql") or ""
                 out = enrich_sonasid_response(
@@ -579,6 +580,7 @@ def process_question(question):
                     question=str(out.get("question") or question),
                     sql=str(sql_used) if sql_used else None,
                 )
+                out = finalize_user_response(out, q_in)
         except Exception:
             pass
         return out

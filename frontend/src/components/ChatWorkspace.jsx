@@ -278,7 +278,21 @@ function getPrecedingUserContent(chat, assistantIdx) {
   return ''
 }
 
-function extractSqlPayload(raw) {
+function userAskedForSql(text) {
+  const tl = String(text || '').toLowerCase()
+  return (
+    /\b(requête|requete|query)\s*(sql)?\b/.test(tl) ||
+    /\bsql\b/.test(tl) ||
+    /\b(montre|affiche|donne|donne-moi)\b.{0,40}\b(sql|requête|requete)\b/.test(tl) ||
+    /\bquelle est la requête\b/.test(tl)
+  )
+}
+
+function extractSqlPayload(raw, { userQuestion = '' } = {}) {
+  if (!userAskedForSql(userQuestion)) {
+    const src = String(raw?.source || '')
+    if (!src.startsWith('sql:') && src !== 'sql:kpi_catalog') return null
+  }
   if (!raw || typeof raw !== 'object') return null
   // KPI catalog: list of {kpi, tsql}
   if (String(raw?.source || '') === 'sql:kpi_catalog' && Array.isArray(raw?.result)) {
@@ -375,6 +389,7 @@ function formatAssistantCompact(res, { clientMode } = { clientMode: false }) {
   if (res?.error) return res?.message ? res.message : `Erreur: ${res.error}`
   const kp = kpiRewritePrefix(res)
   const w = (s) => (kp ? kp + s : s)
+  if (res?.message && String(res.message).trim()) return w(res.message)
   if ((typeof res?.tsql === 'string' && res.tsql.trim()) || (typeof res?.sql === 'string' && res.sql.trim())) {
     const parts = []
     if (typeof res?.tsql === 'string' && res.tsql.trim()) parts.push(`T-SQL (Azure):\n${res.tsql.trim()}`)
@@ -401,7 +416,6 @@ function formatAssistantCompact(res, { clientMode } = { clientMode: false }) {
     }
     return w(res.notice)
   }
-  if (res?.message) return w(res.message)
 
   if (isCompareResponse(res)) {
     const metric = String(res.metric || 'valeur')
@@ -3047,9 +3061,10 @@ export default function ChatWorkspace() {
                           </div>
                         ) : (
                           <>
-                            {m.role !== 'user' && m?.meta?.raw && extractSqlPayload(m.meta.raw) ? (
+                            {m.role !== 'user' && m?.meta?.raw && extractSqlPayload(m.meta.raw, { userQuestion: getPrecedingUserContent(chat, idx) }) ? (
                               (() => {
-                                const payload = extractSqlPayload(m.meta.raw)
+                                const userQ = getPrecedingUserContent(chat, idx)
+                                const payload = extractSqlPayload(m.meta.raw, { userQuestion: userQ })
                                 if (!payload) return <ChatMarkdown content={m.content} />
                                 const raw = m.meta.raw
                                 const err = raw?.error
