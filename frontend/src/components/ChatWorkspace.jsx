@@ -6,6 +6,7 @@ import {
   SONASID_TAGLINE,
   SONASID_WELCOME_HINT,
   buildSonasidWelcomeText,
+  pickRandomSonasidExamples,
 } from '../lib/sonasidCopy'
 import { ChatMarkdown } from '../lib/chatMarkdown'
 import { SonasidBrandLogo, SteelPlantBackground } from '../lib/sonasidTheme'
@@ -1635,6 +1636,7 @@ export default function ChatWorkspace() {
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
 
   const isWelcomeOnly = Array.isArray(chat) && chat.length === 0
+  const welcomeExamples = useMemo(() => pickRandomSonasidExamples(5), [sessionId])
   function scrollToEnd({ behavior = 'auto' } = {}) {
     const el = chatScrollRef.current
     if (!el) return
@@ -3002,6 +3004,23 @@ export default function ChatWorkspace() {
                     <div className="mt-4 max-w-[48rem] text-sm text-slate-600 dark:text-slate-300">
                       <span className="font-medium text-slate-700 dark:text-slate-200">Exemples :</span>{' '}
                       {SONASID_WELCOME_HINT}
+                    </div>
+                    <div className="mt-4 flex max-w-[48rem] flex-wrap justify-center gap-2 px-2">
+                      {welcomeExamples.map((ex) => (
+                        <button
+                          key={ex}
+                          type="button"
+                          className={clsx(
+                            'rounded-full border px-3 py-1.5 text-left text-xs transition-colors',
+                            'border-slate-200/80 bg-white/70 text-slate-700 hover:border-orange-300 hover:bg-orange-50/80',
+                            'dark:border-slate-600/60 dark:bg-slate-800/50 dark:text-slate-200 dark:hover:border-orange-500/50 dark:hover:bg-orange-500/10',
+                          )}
+                          onClick={() => setChatInput(ex)}
+                          title="Cliquer pour remplir la question"
+                        >
+                          {ex}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ) : null}

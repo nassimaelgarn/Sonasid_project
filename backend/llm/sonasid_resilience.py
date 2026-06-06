@@ -5,6 +5,7 @@ Ordre : schéma / inventaire BDD → brief / règles KPI → (pipeline + LLM) �
 from __future__ import annotations
 
 import os
+import random
 import re
 from typing import Any, Dict, Optional
 
@@ -98,8 +99,10 @@ def build_guidance_reply(question: str) -> Dict[str, Any]:
             elif any(w in ql for w in ("tonnage", "import", "marchandise")) and "tonnage" in el:
                 picks.append(ex)
         if not picks:
-            picks = [item.get("question", "") for item in catalog[:5] if item.get("question")]
+            all_q = [item.get("question", "") for item in catalog if item.get("question")]
+            picks = random.sample(all_q, min(5, len(all_q))) if all_q else []
         else:
+            random.shuffle(picks)
             picks = picks[:5]
         if picks:
             lines.append("**Questions que je sais traiter** (données réelles en base) :")
