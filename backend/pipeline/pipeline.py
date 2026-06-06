@@ -522,6 +522,38 @@ def _fetch_conso_monthly_series_for_analysis(canon_q: str) -> Optional[List[Dict
         return None
 
 
+def _fetch_sonasid_monthly_series_for_analysis(canon_q: str) -> Optional[List[Dict[str, Any]]]:
+    """Série mensuelle Sonasid (tonnage, arrivages…) pour alimenter une analyse LLM."""
+    q0 = _strip_inline_analysis_verbs(canon_q)
+    if not q0:
+        return None
+    ql = q0.lower()
+    if any(x in ql for x in ("par mois", "par jour", "par semaine", "mensuel")):
+        return None
+    if not re.search(r"\b(tonnage|arrivages?|navires?|transfert|commande)\b", ql):
+        return None
+    q2 = normalize_kpi_question(f"{q0} par mois")
+    raw = generate_sql(q2)
+    sql = extract_sql(raw) if not isinstance(raw, dict) else None
+    if not sql:
+        return None
+    try:
+        result = run_query(sql)
+        if isinstance(result, str) or not result:
+            return None
+        formatted = _format_rows(ql, result)
+        if (
+            isinstance(formatted, list)
+            and formatted
+            and isinstance(formatted[0], dict)
+            and formatted[0].get("period") is not None
+        ):
+            return formatted
+    except Exception:
+        return None
+    return None
+
+
 def process_question(question, model_name: str = ""):
     # Ensure default corpus is indexed (idempotent, small).
     # This enables RAG even on first run without manual ingest.
@@ -718,6 +750,11 @@ def process_question(question, model_name: str = ""):
                 if series:
                     enriched["result"] = series
                     enriched["_rows_total"] = len(series)
+            elif _sonasid_pipe and isinstance(enriched.get("result"), (int, float)):
+                series = _fetch_sonasid_monthly_series_for_analysis(cq)
+                if series:
+                    enriched["result"] = series
+                    enriched["_rows_total"] = len(series)
 
         body = build_kpi_analyse_body(canonical_question=cq, raw=enriched)
         if not body:
@@ -732,12 +769,11 @@ def process_question(question, model_name: str = ""):
             )
             return out
         sys = (
-            "Tu es un analyste senior pour une aciérie.\n"
-            "Tu dois INTERPRÉTER les chiffres : tendance dans le temps, mois forts/faibles, ruptures éventuelles, "
-            "répartition EAF vs LF si ces champs sont présents.\n"
-            "Ne te contente pas de recopier les totaux : si seuls des agrégats sont fournis, dis ce qu'on peut en déduire "
-            "et ce qui manque pour aller plus loin.\n"
-            "Réponds en français, concis (puces courtes). N'invente aucune valeur absente des données JSON.\n"
+            "Tu es un analyste décisionnel Sonasid (port & arrivages de matières premières).\n"
+            "Tu dois INTERPRÉTER les chiffres : tendance dans le temps, mois forts/faibles, saisonnalité, "
+            "points d'attention logistiques.\n"
+            "Ne te contente pas de recopier les totaux : tire des insights métier à partir des données JSON.\n"
+            "Réponds en français (4 à 8 phrases ou puces courtes). N'invente aucune valeur absente des données.\n"
             "Ne propose pas de nouvelle requête SQL.\n"
         )
         prompt = f"{sys}\n\nConsigne et données:\n{body}\n"

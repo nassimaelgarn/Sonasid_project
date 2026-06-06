@@ -127,7 +127,7 @@ function formatAssistantCompact(res, { clientMode } = { clientMode: false }) {
     }
     return res.notice
   }
-  if (res?.message) return res.message
+  if (res?.message) return withKpiInterpretation(String(res.message).trim(), res)
 
   // Common KPI fields → readable text (client-friendly)
   if (typeof res?.TD_percent === 'number') return withKpiInterpretation(`TD: ${res.TD_percent}%`, res)

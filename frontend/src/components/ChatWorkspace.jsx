@@ -396,7 +396,7 @@ function formatAssistantCompact(res, { clientMode } = { clientMode: false }) {
   if (res?.error) return res?.message ? res.message : `Erreur: ${res.error}`
   const kp = kpiRewritePrefix(res)
   const w = (s) => (kp ? kp + s : s)
-  if (res?.message && String(res.message).trim()) return w(res.message)
+  if (res?.message && String(res.message).trim()) return w(withKpiInterpretation(String(res.message).trim(), res))
   if ((typeof res?.tsql === 'string' && res.tsql.trim()) || (typeof res?.sql === 'string' && res.sql.trim())) {
     const parts = []
     if (typeof res?.tsql === 'string' && res.tsql.trim()) parts.push(`T-SQL (Azure):\n${res.tsql.trim()}`)
