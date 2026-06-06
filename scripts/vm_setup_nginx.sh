@@ -12,7 +12,7 @@ cd "$PROJECT_DIR"
 echo "==> git pull"
 git pull origin main || true
 
-if [[ ! -f "$CERT_DIR/fullchain.pem" ]]; then
+if ! sudo test -f "$CERT_DIR/fullchain.pem"; then
   echo "Certificat SSL absent ($CERT_DIR)."
   echo "Lance d'abord : sudo certbot --nginx -d $DOMAIN"
   exit 1
