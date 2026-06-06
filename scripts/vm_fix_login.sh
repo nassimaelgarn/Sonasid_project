@@ -12,21 +12,27 @@ git pull origin main || true
 echo "==> CORS backend"
 ENV_FILE="$PROJECT_DIR/.env"
 touch "$ENV_FILE"
+CORS_VAL="https://sonasid-alexsys.westeurope.cloudapp.azure.com,http://sonasid-alexsys.westeurope.cloudapp.azure.com,http://sonasid-alexsys.westeurope.cloudapp.azure.com:5175,http://135.236.108.108,http://135.236.108.108:5175"
 grep -q '^CORS_ORIGINS=' "$ENV_FILE" && sed -i.bak \
-  's|^CORS_ORIGINS=.*|CORS_ORIGINS=http://135.236.108.108,http://135.236.108.108:5175,http://sonasid-alexsys.westeurope.cloudapp.azure.com,http://sonasid-alexsys.westeurope.cloudapp.azure.com:5175|' \
-  "$ENV_FILE" || echo 'CORS_ORIGINS=http://135.236.108.108,http://135.236.108.108:5175,http://sonasid-alexsys.westeurope.cloudapp.azure.com,http://sonasid-alexsys.westeurope.cloudapp.azure.com:5175' >> "$ENV_FILE"
+  "s|^CORS_ORIGINS=.*|CORS_ORIGINS=$CORS_VAL|" \
+  "$ENV_FILE" || echo "CORS_ORIGINS=$CORS_VAL" >> "$ENV_FILE"
 
-echo "==> Test API login"
+echo "==> Test API login (localhost)"
 curl -sf -X POST http://127.0.0.1:8001/auth/local/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"abdelkaioume.ammour","password":"Am1122"}' | head -c 100
+  -d '{"username":"abdelkaioume.ammour","password":"Am1122"}' | head -c 120
 echo ""
 
-echo "==> PM2 restart (vite proxy + allowedHosts dans vite.config.js)"
+echo "==> Test API via nginx HTTPS (si configuré)"
+curl -sfk -X POST "https://sonasid-alexsys.westeurope.cloudapp.azure.com/auth/local/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"abdelkaioume.ammour","password":"Am1122"}' 2>/dev/null | head -c 120 || echo "(nginx pas encore configuré — lance bash scripts/vm_setup_nginx.sh)"
+echo ""
+
+echo "==> PM2 restart"
 pm2 restart my-backend my-frontend --update-env
 
 echo ""
 echo "URLs :"
-echo "  http://135.236.108.108:5175"
-echo "  http://sonasid-alexsys.westeurope.cloudapp.azure.com:5175"
-echo "Login : abdelkaioume.ammour / Am1122"
+echo "  https://sonasid-alexsys.westeurope.cloudapp.azure.com  (recommandé — micro OK)"
+echo "  http://135.236.108.108:5175  (secours direct Vite)"

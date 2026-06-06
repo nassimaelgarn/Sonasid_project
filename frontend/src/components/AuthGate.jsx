@@ -138,7 +138,7 @@ export default function AuthGate({ children }) {
       if (/failed to fetch|networkerror|load failed/i.test(msg)) {
         setErr(
           'Impossible de joindre l’API backend.\n'
-            + 'Sur la VM : git pull && bash scripts/vm_fix_login.sh && pm2 restart my-frontend',
+            + 'Sur la VM : git pull && bash scripts/vm_setup_nginx.sh && pm2 restart my-backend my-frontend',
         )
       } else {
         setErr(msg)
