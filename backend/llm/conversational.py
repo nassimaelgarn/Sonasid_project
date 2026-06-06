@@ -34,13 +34,20 @@ def is_pure_greeting(text: str) -> bool:
 
 def should_use_kpi_pipeline(text: str) -> bool:
     """True → exécuter process_question / SQL ; False → conversation LLM."""
-    from backend.llm.llm_sql import is_same_kpi_followup_text, normalize_user_question
+    from backend.llm.llm_sql import (
+        is_contextual_data_followup_text,
+        is_same_kpi_followup_text,
+        is_table_format_followup_text,
+        normalize_user_question,
+    )
 
     t = normalize_user_question((text or "").strip())
     if not t:
         return False
     if is_pure_greeting(t):
         return False
+    if is_table_format_followup_text(t) or is_contextual_data_followup_text(t):
+        return True
     try:
         from backend.llm.sonasid_schema import is_schema_metadata_question, is_sonasid_company_question
 

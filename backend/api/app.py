@@ -29,7 +29,12 @@ from backend.rag.store import (
     list_conversations,
 )
 from backend.agent.graph import run_agent
-from backend.llm.llm_sql import kpi_period_span_from_question, merge_kpi_followup_from_history, merge_need_period_followup_from_history
+from backend.llm.llm_sql import (
+    kpi_period_span_from_question,
+    merge_kpi_followup_from_history,
+    merge_need_period_followup_from_history,
+    merge_table_format_followup_from_history,
+)
 from backend.security.access_control import (
     access_denied_response,
     allowed_years_for_actor,
@@ -341,7 +346,11 @@ def _run_chat_pipeline(
             )
         elif should_use_kpi_pipeline(question) or should_force_kpi_pipeline(question):
             res = soften_pipeline_failure(
-                process_question(question, model_name=model_name or ""),
+                process_question(
+                    question,
+                    model_name=model_name or "",
+                    session_id=session_id,
+                ),
                 question,
                 model_name=model_name or "",
             )
@@ -375,7 +384,11 @@ def _run_chat_pipeline(
                 except Exception:
                     pass
 
-            fallback = process_question(question, model_name=model_name or "")
+            fallback = process_question(
+                question,
+                model_name=model_name or "",
+                session_id=session_id,
+            )
             if isinstance(fallback, dict):
                 fallback = dict(fallback)
                 fallback.setdefault("question", echo_question)
@@ -899,6 +912,7 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
 
     q_eff = merge_need_period_followup_from_history(q_raw, prior)
     q_eff = merge_kpi_followup_from_history(q_eff, prior)
+    q_eff = merge_table_format_followup_from_history(q_eff, prior)
     notice_ui = None
 
     # If the UI provided a date range, apply it server-side ONLY for KPI-like questions.

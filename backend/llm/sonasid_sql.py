@@ -279,6 +279,8 @@ def _is_fournisseur_ranking_question(ql: str) -> bool:
         or re.search(r"\b(plus|moins|maximum|maxi)\b", ql)
         or re.search(r"\bpar fournisseur\b", ql)
         or re.search(r"\blist(e|er)\b", ql)
+        or re.search(r"\b(cite|citer|communiquer|donne|donner|affiche|montre)\b", ql)
+        or (re.search(r"\btous(\s+les)?\b", ql) and re.search(r"\bfournisseurs?\b", ql))
     )
 
 
@@ -296,6 +298,8 @@ def _is_navire_ranking_question(ql: str) -> bool:
 
 
 def _extract_top_n(ql: str, *, default: int = 10) -> int:
+    if re.search(r"\btous(\s+les)?\b", ql) and re.search(r"\bfournisseurs?\b", ql):
+        return 50
     m = re.search(r"\btop\s*(\d+)\b", ql)
     if m:
         try:

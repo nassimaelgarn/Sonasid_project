@@ -46,6 +46,13 @@ def retry_question_via_llm(question: str, *, model_name: str = "") -> Optional[D
     if not q:
         return None
     try:
+        from backend.llm.llm_sql import is_contextual_data_followup_text, should_skip_kpi_rewrite
+
+        if is_contextual_data_followup_text(q) or should_skip_kpi_rewrite(q):
+            return None
+    except Exception:
+        pass
+    try:
         from backend.llm.kpi_rewrite import rewrite_kpi_question
         from backend.llm.llm_sql import normalize_kpi_question
 

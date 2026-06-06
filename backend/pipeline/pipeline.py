@@ -554,7 +554,7 @@ def _fetch_sonasid_monthly_series_for_analysis(canon_q: str) -> Optional[List[Di
     return None
 
 
-def process_question(question, model_name: str = ""):
+def process_question(question, model_name: str = "", session_id: Optional[str] = None):
     # Ensure default corpus is indexed (idempotent, small).
     # This enables RAG even on first run without manual ingest.
     try:
@@ -562,11 +562,23 @@ def process_question(question, model_name: str = ""):
     except Exception:
         pass
 
-    session_id = None
-    # Backward-compatible: allow callers to pass "question" only.
-    # session_id is handled by api/app.py once wired.
-
     q_in = (question or "").strip()
+    try:
+        from backend.llm.llm_sql import (
+            is_contextual_data_followup_text,
+            merge_table_format_followup_from_history,
+        )
+
+        if is_contextual_data_followup_text(q_in) and session_id:
+            from backend.rag.store import get_conversation_history
+
+            prior = get_conversation_history(session_id=session_id, limit=80)
+            merged = merge_table_format_followup_from_history(q_in, prior)
+            if merged and merged.strip() and merged.strip() != q_in:
+                q_in = merged.strip()
+                question = q_in
+    except Exception:
+        pass
     _open_expanded = False
     _expand_notice: Optional[str] = None
     try:
@@ -681,12 +693,20 @@ def process_question(question, model_name: str = ""):
 
     def _user_requests_inline_analysis(text: str) -> bool:
         t = (text or "").strip().lower()
+        if re.search(r"\b(tableau|tableaux|tabulaire)\b", t) and not re.search(
+            r"\b(analyse|analyser|résumé|resume|interprète|explique)\b", t
+        ):
+            return False
         return bool(
             re.search(
                 r"\b(analyse(r|z)?|analysons|résumé|résume|resumé|resume|resumer|interprète|interprete|explique)\b",
                 t,
             )
         )
+
+    def _user_requests_table_format(text: str) -> bool:
+        t = (text or "").strip().lower()
+        return bool(re.search(r"\b(tableau|tableaux|tabulaire|colonnes|grille)\b", t))
 
     def _has_interpretable_kpi_payload(d: Dict[str, Any]) -> bool:
         if not isinstance(d, dict) or d.get("error"):
@@ -918,6 +938,19 @@ def process_question(question, model_name: str = ""):
         _rewrite_on = is_sonasid_kpi_rewrite_enabled()
     except Exception:
         _rewrite_on = is_kpi_rewrite_enabled()
+    if (
+        isinstance(raw, str)
+        and extract_sql(raw).strip().upper() == "SELECT 1"
+        and _rewrite_on
+        and not _open_expanded
+    ):
+        try:
+            from backend.llm.llm_sql import should_skip_kpi_rewrite
+
+            if should_skip_kpi_rewrite(question):
+                _rewrite_on = False
+        except Exception:
+            pass
     if (
         isinstance(raw, str)
         and extract_sql(raw).strip().upper() == "SELECT 1"
@@ -1732,6 +1765,19 @@ def process_question(question, model_name: str = ""):
     ):
         formatted = _format_rows(ql, result)
         if isinstance(formatted, list) and formatted and isinstance(formatted[0], dict):
+            if _user_requests_table_format(ql):
+                period = ""
+                m_y = re.search(r"\b(20\d{2})\b", ql)
+                if m_y:
+                    period = f" ({m_y.group(1)})"
+                return attach_rewrite(
+                    {
+                        "question": question,
+                        "result": formatted,
+                        "source": "sql:sonasid",
+                        "message": f"**Fournisseurs — arrivages{period}**",
+                    }
+                )
             lines = []
             for i, row in enumerate(formatted[:10], 1):
                 nom = row.get("fournisseur") or "—"

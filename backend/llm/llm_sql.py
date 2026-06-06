@@ -494,6 +494,8 @@ def _last_kpi_user_question(prior_messages: Optional[List[Dict[str, Any]]]) -> s
         prev_u = str(msgs[i].get("content") or "").strip()
         if not prev_u:
             continue
+        if is_contextual_data_followup_text(prev_u):
+            continue
         if looks_like_kpi_question(prev_u):
             return prev_u
         if len(prev_u) > 12 and not is_pure_greeting_short(prev_u):
@@ -533,6 +535,138 @@ def merge_kpi_followup_from_history(
             return re.sub(r"\b20\d{2}-\d{2}\b", new_m, prev_u, count=1)
         return f"{prev_u} {new_m}".strip()
     return f"{prev_u} {q}".strip()
+
+
+def is_table_format_followup_text(text: str) -> bool:
+    """Relance du type « en tableau », « je les veux dans un tableau »."""
+    s = re.sub(r"\s+", " ", (text or "").strip().lower())
+    if not s:
+        return False
+    if re.search(r"\b(tableau|tableaux|tabulaire|colonnes|grille)\b", s):
+        return True
+    if re.search(r"\b(sous\s+forme|forme)\s+de\s+(tableau|table|liste)\b", s):
+        return True
+    if re.search(r"\b(dans|sous)\s+(un\s+)?tableau\b", s):
+        return True
+    if re.search(r"\b(les|ceux|cela|ça|ca|leurs)\b", s) and re.search(
+        r"\b(tableau|table|affich|montr|voir|format|colonnes)\b", s
+    ):
+        return True
+    return False
+
+
+def is_contextual_data_followup_text(text: str) -> bool:
+    """Relance anaphorique (« leurs noms », « chacun leurs arrivages ») sans re-définir l'entité."""
+    if is_table_format_followup_text(text):
+        return True
+    s = re.sub(r"\s+", " ", (text or "").strip().lower())
+    if not s:
+        return False
+    if re.search(r"\b(fournisseurs?|navires?)\b", s):
+        return False
+    if re.search(r"\b(leurs|les|ceux|cela|ça|ca|chacun)\b", s) and re.search(
+        r"\b(noms?|arrivages?|tonnage)\b", s
+    ):
+        return True
+    if re.search(r"\b(mets?|met|mettre|donne|donner|affiche|montre)\b", s) and re.search(
+        r"\b(leurs|les|noms?)\b", s
+    ):
+        return True
+    return False
+
+
+def should_skip_kpi_rewrite(question: str) -> bool:
+    """Ne pas laisser le LLM réinterpréter une relance contextuelle (fournisseurs → navires)."""
+    q = (question or "").strip().lower()
+    if is_contextual_data_followup_text(q):
+        return True
+    if re.search(r"\ben\s+tableau\b", q):
+        return True
+    return False
+
+
+def _extract_year_from_messages(
+    prior_messages: Optional[List[Dict[str, Any]]],
+) -> Optional[str]:
+    for msg in reversed(prior_messages or []):
+        m = re.search(r"\b(20\d{2})\b", str(msg.get("content") or ""))
+        if m:
+            return m.group(1)
+    return None
+
+
+def _infer_topic_and_year_from_history(
+    prior_messages: Optional[List[Dict[str, Any]]],
+) -> Tuple[Optional[str], Optional[str]]:
+    """Déduit le sujet (fournisseur, navire, …) et l'année depuis l'historique récent."""
+    year = _extract_year_from_messages(prior_messages)
+    msgs = prior_messages or []
+
+    # Priorité aux questions utilisateur explicites (fournisseur > navire).
+    for msg in reversed(msgs):
+        if str(msg.get("role", "")).strip() != "user":
+            continue
+        cl = str(msg.get("content") or "").lower()
+        if is_contextual_data_followup_text(cl):
+            continue
+        if re.search(r"\bfournisseurs?\b", cl):
+            return "fournisseur", year
+        if re.search(r"\bnavires?\b", cl) and not re.search(r"\btransfert", cl):
+            return "navire", year
+
+    topic: Optional[str] = None
+    for msg in reversed(msgs):
+        content = str(msg.get("content") or "")
+        if not content:
+            continue
+        cl = content.lower()
+        if not topic:
+            if re.search(r"\bfournisseurs?\b", cl):
+                topic = "fournisseur"
+            elif re.search(r"\bnavires?\b", cl) and not re.search(r"\btransfert", cl):
+                topic = "navire"
+            elif re.search(r"\btonnage\b", cl) and re.search(r"\bimport", cl):
+                topic = "tonnage"
+            elif re.search(r"\barrivages?\b", cl):
+                topic = "arrivage"
+        if topic and year:
+            break
+    return topic, year
+
+
+def merge_table_format_followup_from_history(
+    question: str,
+    prior_messages: Optional[List[Dict[str, Any]]],
+) -> str:
+    """
+    « Je les veux dans un tableau » → reprend la dernière question KPI / sujet détecté
+    et produit une requête déterministe (sans LLM).
+    """
+    q = (question or "").strip()
+    if not q or not is_contextual_data_followup_text(q):
+        return q
+    prev_u = _last_kpi_user_question(prior_messages)
+    if prev_u and not is_contextual_data_followup_text(prev_u):
+        return f"{prev_u} en tableau".strip()
+    topic, year = _infer_topic_and_year_from_history(prior_messages)
+    ql = q.lower()
+    if topic == "fournisseur":
+        base = "liste des fournisseurs par arrivages"
+        if re.search(r"\btonnage\b", ql) and not re.search(r"\barrivages?\b", ql):
+            base = "top fournisseurs par tonnage"
+        if year:
+            base = f"{base} en {year}"
+        return f"{base} en tableau"
+    if topic == "navire":
+        base = "top navires par tonnage importé"
+        if year:
+            base = f"{base} en {year}"
+        return f"{base} en tableau"
+    if prev_u:
+        return f"{prev_u} en tableau".strip()
+    if year:
+        return f"top fournisseurs par arrivages en {year} en tableau"
+    return q
 
 
 def merge_need_period_followup_from_history(

@@ -331,6 +331,54 @@ def main() -> int:
     )
     ok_all &= check("apply_sonasid_typos", "tonnage" in apply_sonasid_typos("tonage").lower())
 
+    print("\n=== 13. Relance « en tableau » (anti-504) ===")
+    from backend.llm.llm_sql import (
+        is_contextual_data_followup_text,
+        is_table_format_followup_text,
+        merge_table_format_followup_from_history,
+        should_skip_kpi_rewrite,
+    )
+
+    table_q = "je les veux dans un tableau avec leurs arrivages"
+    ok_all &= check(
+        "detecte follow-up tableau",
+        is_table_format_followup_text(table_q),
+        table_q,
+    )
+    names_table_q = "mets leurs noms dans un tableau avec chacun leurs arrivages"
+    ok_all &= check(
+        "detecte relance anaphorique fournisseurs",
+        is_contextual_data_followup_text(names_table_q),
+        names_table_q,
+    )
+    prior = [
+        {"role": "user", "content": "Cite moi tous les fournisseurs en 2025"},
+        {"role": "assistant", "content": "Top fournisseurs… European Metal Recycling…"},
+    ]
+    merged = merge_table_format_followup_from_history(table_q, prior)
+    ok_all &= check(
+        "fusionne avec question fournisseurs",
+        "fournisseur" in merged.lower() and "2025" in merged,
+        merged,
+    )
+    merged2 = merge_table_format_followup_from_history(names_table_q, prior)
+    ok_all &= check(
+        "fusionne noms/tableau → fournisseurs 2025",
+        "fournisseur" in merged2.lower() and "2025" in merged2,
+        merged2,
+    )
+    ok_all &= check(
+        "bloque rewrite LLM sur relance contextuelle",
+        should_skip_kpi_rewrite(names_table_q),
+        names_table_q,
+    )
+    ok_all &= check(
+        "SQL déterministe fournisseurs + tableau",
+        isinstance(try_sonasid_kpi_sql(merged2), str)
+        and "FOURNISSEUR" in (try_sonasid_kpi_sql(merged2) or "").upper(),
+        merged2[:80],
+    )
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")
