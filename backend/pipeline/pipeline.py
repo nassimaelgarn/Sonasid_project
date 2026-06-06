@@ -48,6 +48,11 @@ def _clean_num(v):
             if abs(v - round(v)) < 1e-6:
                 return int(round(v))
             return round(v, 2)
+        if hasattr(v, "__float__"):
+            x = float(v)
+            if abs(x - round(x)) < 1e-6:
+                return int(round(x))
+            return round(x, 2)
     except Exception:
         pass
     return v
@@ -1447,7 +1452,7 @@ def process_question(question):
     if re.search(r"\bd[eéè]charg", ql, re.I) and re.search(
         r"\btonnage_decharge\b", (sql or ""), re.I
     ):
-        v = round(float(value), 2) if isinstance(value, (int, float)) else value
+        v = _clean_num(value)
         return attach_rewrite(
             {
                 "question": question,
@@ -1460,7 +1465,7 @@ def process_question(question):
     if re.search(r"\bd[eéè]charg", ql, re.I) and re.search(
         r"\btonnage_restant\b", (sql or ""), re.I
     ):
-        v = round(float(value), 2) if isinstance(value, (int, float)) else value
+        v = _clean_num(value)
         return attach_rewrite(
             {
                 "question": question,
@@ -1473,7 +1478,7 @@ def process_question(question):
     if re.search(r"\bd[eéè]charg", ql, re.I) and re.search(
         r"\btaux_dechargement_moyen\b", (sql or ""), re.I
     ):
-        v = round(float(value), 2) if isinstance(value, (int, float)) else value
+        v = _clean_num(value)
         return attach_rewrite(
             {
                 "question": question,
@@ -1759,7 +1764,7 @@ def process_question(question):
         )
         sql_has_import = bool(re.search(r"\btonnage_importe\b", (sql or ""), re.I))
         key = "tonnage_importe" if (is_import or sql_has_import) else "tonnage_total"
-        v = round(float(value), 2) if isinstance(value, (int, float)) else value
+        v = _clean_num(value)
         if key == "tonnage_importe" and re.search(r"\b(marchandise|valeur)\b", ql, re.I):
             label = "Valeur importée (tonnage)"
         else:

@@ -48,12 +48,21 @@ def friendly_db_error(err: str) -> str:
 
 def _fmt_num(v: Any) -> str:
     try:
-        x = float(v)
+        if isinstance(v, bool):
+            return str(v)
+        if isinstance(v, int):
+            return f"{v:,}".replace(",", " ")
+        if isinstance(v, float):
+            x = v
+        elif hasattr(v, "__float__"):
+            x = float(v)
+        else:
+            return str(v)
+        if abs(x - round(x)) < 1e-6:
+            return f"{int(round(x)):,}".replace(",", " ")
+        return f"{x:,.2f}".replace(",", " ").replace(".", ",")
     except (TypeError, ValueError):
         return str(v)
-    if abs(x - round(x)) < 1e-6:
-        return f"{int(round(x)):,}".replace(",", " ")
-    return f"{x:,.2f}".replace(",", " ").replace(".", ",")
 
 
 def build_natural_message(question: str, result: Any, *, ql: str = "") -> str:
