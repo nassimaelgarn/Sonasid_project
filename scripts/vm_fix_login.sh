@@ -17,6 +17,13 @@ grep -q '^CORS_ORIGINS=' "$ENV_FILE" && sed -i.bak \
   "s|^CORS_ORIGINS=.*|CORS_ORIGINS=$CORS_VAL|" \
   "$ENV_FILE" || echo "CORS_ORIGINS=$CORS_VAL" >> "$ENV_FILE"
 
+echo "==> Dépendances Python (python-multipart pour /chat/stt)"
+if [[ -f "$PROJECT_DIR/.venv/bin/pip" ]]; then
+  "$PROJECT_DIR/.venv/bin/pip" install -q python-multipart || true
+elif [[ -f "$PROJECT_DIR/requirements.txt" ]]; then
+  pip install -q -r "$PROJECT_DIR/requirements.txt" || true
+fi
+
 echo "==> PM2 restart (backend d'abord)"
 pm2 restart my-backend --update-env || pm2 start my-backend --update-env || true
 sleep 2

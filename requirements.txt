@@ -2,6 +2,7 @@ pandas>=2.0
 sqlalchemy>=2.0
 openpyxl>=3.1
 fastapi>=0.115
+python-multipart>=0.0.9
 uvicorn[standard]>=0.30
 langgraph>=1.1
 langchain>=0.2
