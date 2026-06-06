@@ -32,19 +32,33 @@ def _rewrite_provider_mode() -> str:
 
 
 def _build_rewrite_messages(*, user_question: str, extra_context: str) -> list:
-    sys = (
-        "Tu es un assistant pour un dashboard KPI d'aciérie.\n"
-        "Tâche : reformuler la question utilisateur en UNE seule phrase courte, en français, "
-        "compréhensible par un moteur de règles (mots-clés KPI + période si présente).\n"
-        "Ne produis PAS de SQL, pas de markdown, pas d'explication.\n"
-        "Réponds UNIQUEMENT avec un JSON valide sur une ligne ou plusieurs, format exact :\n"
-        '{"kpi_question":"..."}\n'
-        "Si ce n'est pas une demande de KPI (ex: blague, hors sujet), mets une chaîne vide : "
-        '{"kpi_question":""}\n'
-        "KPI typiques : production, consommation électrique / oxygène / gpl / carbone, TD, TR, MTBF, MTTR, "
-        "rendement, nombre de coulées, nombre de brames, poids ferrailles, etc.\n"
-        "Préserve les dates (2025, 2025-01, du YYYY-MM-DD au YYYY-MM-DD)."
-    )
+    prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
+    if prof in {"sonasid", "shipping", "port"}:
+        sys = (
+            "Tu es l'assistant KPI Sonasid (port, navires cargo, arrivages, tonnages, fournisseurs).\n"
+            "L'utilisateur écrit en français libre, souvent avec fautes d'orthographe — corrige-les mentalement.\n"
+            "Tâche : reformuler en UNE phrase KPI claire que le moteur SQL comprend.\n"
+            "Garde période (2025, 2025-01, janvier 2025), id fournisseur/navire, indicateur (tonnage importé, "
+            "arrivages, navires actifs, déchargement, transfert, qualité…).\n"
+            "Ne produis PAS de SQL ni d'explication.\n"
+            'Réponds UNIQUEMENT en JSON : {"kpi_question":"..."}\n'
+            'Si ce n\'est pas une demande de données port/arrivages : {"kpi_question":""}\n'
+            "Exemples : « combien d arivages en 2025 » → tonnage/nombre arrivages en 2025 ; "
+            "« tonage importé 2025 » → tonnage importé en 2025."
+        )
+    else:
+        sys = (
+            "Tu es un assistant pour un dashboard KPI d'aciérie.\n"
+            "Tâche : reformuler la question utilisateur en UNE seule phrase courte, en français, "
+            "compréhensible par un moteur de règles (mots-clés KPI + période si présente).\n"
+            "Ignore les fautes d'orthographe.\n"
+            "Ne produis PAS de SQL, pas de markdown, pas d'explication.\n"
+            'Réponds UNIQUEMENT avec un JSON valide : {"kpi_question":"..."}\n'
+            'Si ce n\'est pas une demande de KPI : {"kpi_question":""}\n'
+            "KPI typiques : production, consommation électrique / oxygène / gpl / carbone, TD, TR, MTBF, MTTR, "
+            "rendement, nombre de coulées, nombre de brames, poids ferrailles, etc.\n"
+            "Préserve les dates (2025, 2025-01, du YYYY-MM-DD au YYYY-MM-DD)."
+        )
     ctx = (extra_context or "").strip()
     user = f"Question utilisateur :\n{user_question.strip()}\n\nContexte (RAG, peut être vide) :\n{ctx or '(vide)'}\n"
     return [
@@ -175,10 +189,57 @@ def _ollama_chat_rewrite(
         return None, f"Ollama: {exc}"
 
 
+def _llm_rewrite_json(
+    user_question: str,
+    *,
+    extra_context: str,
+    model_name: str = "",
+) -> Tuple[Optional[str], str]:
+    """Reformulation via invoke_chat_text (Azure / OpenRouter / Ollama)."""
+    try:
+        from backend.agent.llm import invoke_chat_text
+
+        msgs = _build_rewrite_messages(user_question=user_question, extra_context=extra_context)
+        prompt = "\n\n".join(f"{m['role'].upper()}:\n{m['content']}" for m in msgs)
+        models: list[str] = []
+        for mn in (
+            (model_name or "").strip(),
+            (os.getenv("SONASID_NARRATE_MODEL", "") or "").strip(),
+            (os.getenv("SONASID_DEFAULT_CHAT_MODEL", "") or "").strip(),
+            "kimi",
+            "deepseek",
+            "grok",
+            "flash",
+        ):
+            if mn and mn not in models:
+                models.append(mn)
+        last_err = "aucun modèle"
+        for mn in models:
+            try:
+                text = (
+                    invoke_chat_text(
+                        prompt=prompt,
+                        model_name=mn,
+                        temperature=0.0,
+                    )
+                    or ""
+                ).strip()
+                kpi = _parse_kpi_json(text)
+                if kpi:
+                    return kpi, f"llm:{mn}"
+                last_err = f"{mn}: JSON vide"
+            except Exception as e:
+                last_err = f"{mn}: {e}"
+        return None, last_err
+    except Exception as exc:
+        return None, str(exc)
+
+
 def rewrite_kpi_question(
     user_question: str,
     *,
     extra_context: str = "",
+    model_name: str = "",
 ) -> Tuple[Optional[str], str, str]:
     """
     Returns:
@@ -188,6 +249,12 @@ def rewrite_kpi_question(
     q = (user_question or "").strip()
     if not q:
         return None, "none", "question vide"
+
+    # Priorité : modèle UI / Azure entreprise
+    if model_name or (os.getenv("AZURE_OPENAI_API_KEY") or "").strip():
+        kpi, reason = _llm_rewrite_json(q, extra_context=extra_context, model_name=model_name)
+        if kpi:
+            return kpi, reason.split(":", 1)[0] if ":" in reason else "llm", reason
 
     if mode == "openrouter":
         kpi, reason = _openrouter_rewrite(q, extra_context=extra_context)

@@ -29,6 +29,8 @@ def is_sonasid_llm_available() -> bool:
         return True
     if (os.getenv("OPENROUTER_API_KEY", "") or "").strip():
         return True
+    if (os.getenv("AZURE_OPENAI_API_KEY", "") or "").strip():
+        return True
     return False
 
 
@@ -48,10 +50,16 @@ def is_sonasid_llm_narrate() -> bool:
 
 
 def is_sonasid_kpi_rewrite_enabled() -> bool:
-    """Reformulation KPI aciérie — désactivée par défaut en mode Sonasid ouvert."""
+    """Reformulation LLM avant échec KPI — activée par défaut si Azure ou KPI_REWRITE_LLM."""
     if is_sonasid_open_mode():
-        v = (os.getenv("SONASID_KPI_REWRITE", "false") or "false").strip().lower()
-        return v in {"1", "true", "yes", "on"}
+        v = (os.getenv("SONASID_KPI_REWRITE", "") or "").strip().lower()
+        if v in {"0", "false", "no", "off"}:
+            return False
+        if v in {"1", "true", "yes", "on"}:
+            return True
+        if (os.getenv("AZURE_OPENAI_API_KEY") or "").strip():
+            return True
+        return is_kpi_rewrite_enabled()
     from backend.llm.kpi_rewrite import is_kpi_rewrite_enabled
 
     return is_kpi_rewrite_enabled()
@@ -76,10 +84,33 @@ def looks_like_sonasid_data_question(text: str) -> bool:
     if not t or len(t) < 3:
         return False
     try:
-        from backend.llm.sonasid_schema import is_schema_metadata_question
+        from backend.llm.sonasid_schema import is_schema_metadata_question, is_sonasid_company_question
 
         if is_schema_metadata_question(t):
             return False
+        if is_sonasid_company_question(t):
+            return False
+    except Exception:
+        pass
+    try:
+        from backend.llm.sonasid_typo import fuzzy_contains
+
+        tl = t.lower()
+        for kw in (
+            "navire",
+            "arrivage",
+            "tonnage",
+            "fournisseur",
+            "transfert",
+            "dechargement",
+            "import",
+            "qualite",
+            "commande",
+            "port",
+            "kpi",
+        ):
+            if fuzzy_contains(tl, kw):
+                return True
     except Exception:
         pass
     if _SONASID_DOMAIN.search(t):

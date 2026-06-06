@@ -139,11 +139,25 @@ def build_guidance_reply(question: str) -> Dict[str, Any]:
     }
 
 
-def soften_pipeline_failure(out: Dict[str, Any], question: str) -> Dict[str, Any]:
+def soften_pipeline_failure(
+    out: Dict[str, Any],
+    question: str,
+    *,
+    model_name: str = "",
+) -> Dict[str, Any]:
     """Enrichit NEED_REPHRASE / erreurs vides — ne pas laisser « Résultat: 1 »."""
     if not isinstance(out, dict):
         return out
     err = str(out.get("error") or "")
+    if err in {"NEED_REPHRASE", "NEED_PERIOD"} or (err and not out.get("message")):
+        try:
+            from backend.llm.sonasid_smart_route import retry_question_via_llm
+
+            retried = retry_question_via_llm(question, model_name=model_name or "")
+            if retried:
+                return retried
+        except Exception:
+            pass
     if err not in {"NEED_REPHRASE", "NEED_PERIOD"} and out.get("message"):
         return out
     if out.get("message") and err != "NEED_REPHRASE":

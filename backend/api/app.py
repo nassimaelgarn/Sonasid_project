@@ -343,6 +343,7 @@ def _run_chat_pipeline(
             res = soften_pipeline_failure(
                 process_question(question, model_name=model_name or ""),
                 question,
+                model_name=model_name or "",
             )
         else:
             res = conversational_reply(

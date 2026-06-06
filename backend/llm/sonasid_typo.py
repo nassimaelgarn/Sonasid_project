@@ -74,9 +74,25 @@ _SONASID_TYPO_PAIRS: tuple[tuple[str, str], ...] = (
     (r"\bquelle est\b", "quels"),
     (r"\bquel est\b", "quels"),
     (r"\bdonne moi\b", "donne-moi"),
-    (r"\bdonnes?\b", "donne"),
-    (r"\bveux avoir\b", "veux un"),
-    (r"\bje veux un\b", "je veux"),
+    (r"\borthographe\b", "orthographe"),
+    (r"\borthograph\b", "orthographe"),
+    (r"\bimportation\b", "importe"),
+    (r"\bimportations\b", "importe"),
+    (r"\barive\b", "arrive"),
+    (r"\barives\b", "arrives"),
+    (r"\barivé\b", "arrive"),
+    (r"\bdebarquement\b", "dechargement"),
+    (r"\bdebarquements\b", "dechargement"),
+    (r"\bdechargements\b", "dechargement"),
+    (r"\bstatistique\b", "statistiques"),
+    (r"\bchifres\b", "chiffres"),
+    (r"\bchifre\b", "chiffre"),
+    (r"\bpricipal\b", "principal"),
+    (r"\bpricipale\b", "principale"),
+    (r"\bentreprize\b", "entreprise"),
+    (r"\bsonazid\b", "sonasid"),
+    (r"\bsonasidd\b", "sonasid"),
+    (r"\bsonasiid\b", "sonasid"),
     (r"\brecemment\b", "récemment"),
     (r"\brécemmen\b", "récemment"),
     (r"\bcette annee\b", "cette année"),
@@ -106,6 +122,14 @@ def fuzzy_contains(haystack: str, word: str, *, max_dist: int = 1) -> bool:
         return True
     if len(w) < 4:
         return False
+    if len(w) >= 5 and len(w) <= len(h) + max_dist:
+        for i in range(max(0, len(h) - len(w) + 1)):
+            chunk = h[i : i + len(w)]
+            if len(chunk) != len(w):
+                continue
+            diff = sum(1 for a, b in zip(chunk, w) if a != b)
+            if diff <= max_dist:
+                return True
     # sous-chaîne proche : tolère 1 substitution sur mots >= 5 lettres
     for token in re.findall(r"[a-z0-9]+", h):
         if token == w:

@@ -167,10 +167,8 @@ def conversational_reply(
     if prof in {"sonasid", "shipping", "port"}:
         domain = (
             "Tu es l’assistant décisionnel Sonasid (port & arrivages de matières premières). "
-            "Ton registre est professionnel, concis et orienté métier (logistique portuaire, supply chain).\n"
-            "Tu peux évoquer la logistique, le maritime ou la douane sans inventer de chiffres : "
-            "pour les données chiffrées, invite à formuler une question avec période et indicateur.\n"
-            "Ne liste pas d’exemples techniques sauf si l’utilisateur le demande.\n"
+            "Comportement type ChatGPT : tolère les fautes, devine l'intention, réponds avec intelligence métier (port, arrivages, tonnages).\n"
+            "Pour les chiffres : oriente vers un KPI avec période (ex. tonnage importé en 2025) — n'invente jamais de chiffres.\n"
         )
     else:
         domain = (
@@ -184,8 +182,8 @@ def conversational_reply(
 
     sys = (
         domain
-        + "Réponds en français avec clarté et intelligence métier (2 à 4 phrases ou 2–3 puces courtes si utile).\n"
-        + "Sois pertinent, nuancé et un peu créatif dans la formulation — sans jargon inutile ni listes longues.\n"
+        + "Réponds en français avec clarté et intelligence (3 à 6 phrases ou puces courtes si utile).\n"
+        + "Interprète la question même si elle est mal formulée. Sois pertinent, nuancé, professionnel.\n"
         + "Ne termine pas systématiquement par une question. Ne réponds jamais par « Résultat: 1 ». N’exécute pas de SQL.\n"
     )
     prompt = f"{sys}\n\nQuestion:\n{q}\n\nContexte (RAG, optionnel):\n{rag or '(vide)'}\n"
@@ -202,6 +200,10 @@ def conversational_reply(
                 models.append(mn)
     for mn in (
         (model_name or "").strip(),
+        (os.getenv("SONASID_DEFAULT_CHAT_MODEL", "") or "").strip(),
+        "kimi",
+        "deepseek",
+        "grok",
         (os.getenv("OPENROUTER_CHAT_FALLBACK", "") or "").strip(),
         "flash",
         (os.getenv("OPENROUTER_MODEL", "") or "").strip(),
@@ -226,6 +228,14 @@ def conversational_reply(
 
     if not text:
         try:
+            from backend.llm.sonasid_smart_route import retry_question_via_llm
+
+            retried = retry_question_via_llm(q, model_name=model_name or "")
+            if retried and retried.get("message"):
+                return retried
+        except Exception:
+            pass
+        try:
             from backend.llm.sonasid_resilience import build_guidance_reply
 
             if not is_pure_greeting(q):
@@ -245,7 +255,12 @@ def conversational_reply(
                 "\n\n_(Modèle cloud indisponible — essaie **Flash**.)_"
             )
 
-    text = _clamp_reply_length(text, max_sentences=3)
+    max_sent = 5
+    try:
+        max_sent = int(os.getenv("SONASID_CHAT_MAX_SENTENCES", "5") or "5")
+    except ValueError:
+        pass
+    text = _clamp_reply_length(text, max_sentences=max(3, max_sent))
 
     return {
         "question": q,

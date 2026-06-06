@@ -929,7 +929,11 @@ def process_question(question, model_name: str = ""):
             rag_ctx = build_rag_context(question=question, session_id=session_id)
         except Exception:
             pass
-        rw, prov, rw_reason = rewrite_kpi_question(question, extra_context=rag_ctx)
+        rw, prov, rw_reason = rewrite_kpi_question(
+            question,
+            extra_context=rag_ctx,
+            model_name=(model_name or "").strip(),
+        )
         if rw:
             q2 = normalize_kpi_question(rw.strip())
             raw2 = generate_sql(q2)

@@ -318,6 +318,19 @@ def main() -> int:
         and "logistique portuaire" in rep_co.get("message", "").lower(),
     )
 
+    print("\n=== 12. Tolérance fautes + smart routing ===")
+    from backend.llm.llm_sql import normalize_user_question
+    from backend.llm.sonasid_typo import apply_sonasid_typos
+
+    messy = "combien d arivages en 2025 tonage importé"
+    fixed = normalize_user_question(messy)
+    ok_all &= check(
+        "normalise typos Sonasid",
+        "arrivages" in fixed.lower() and "tonnage" in fixed.lower(),
+        fixed,
+    )
+    ok_all &= check("apply_sonasid_typos", "tonnage" in apply_sonasid_typos("tonage").lower())
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")
