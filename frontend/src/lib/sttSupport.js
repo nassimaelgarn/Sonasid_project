@@ -33,7 +33,7 @@ export function detectSttCapabilities() {
       preferWebSpeech: false,
       isSafari,
       message:
-        'Le micro nécessite HTTPS (connexion sécurisée). L’URL actuelle est en HTTP — activez SSL sur le serveur ou testez en local (localhost).',
+        'Le micro nécessite HTTPS. Ouvrez https://sonasid-alexsys.westeurope.cloudapp.azure.com (sans :5175).',
     }
   }
 
