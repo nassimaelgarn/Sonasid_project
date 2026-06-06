@@ -522,7 +522,7 @@ def _fetch_conso_monthly_series_for_analysis(canon_q: str) -> Optional[List[Dict
         return None
 
 
-def process_question(question):
+def process_question(question, model_name: str = ""):
     # Ensure default corpus is indexed (idempotent, small).
     # This enables RAG even on first run without manual ingest.
     try:
@@ -689,6 +689,8 @@ def process_question(question):
             return True
         return False
 
+    chat_model = (model_name or os.getenv("SONASID_NARRATE_MODEL", "") or "").strip()
+
     def _maybe_add_interpretation(original_q: str, d: Dict[str, Any]) -> Dict[str, Any]:
         """
         Quand l'utilisateur demande explicitement une analyse / résumé dans la même phrase qu'un KPI,
@@ -739,14 +741,24 @@ def process_question(question):
             "Ne propose pas de nouvelle requête SQL.\n"
         )
         prompt = f"{sys}\n\nConsigne et données:\n{body}\n"
-        model_hint = (os.getenv("PIPELINE_CHAT_MODEL", "") or os.getenv("OPENROUTER_MODEL", "") or "").strip()
+        model_hint = (
+            chat_model
+            or (os.getenv("PIPELINE_CHAT_MODEL", "") or os.getenv("OPENROUTER_MODEL", "") or "").strip()
+        )
         text = ""
         last_err: Optional[str] = None
-        for mn in (model_hint, "flash"):
+        for mn in (model_hint, (os.getenv("SONASID_NARRATE_MODEL", "") or "").strip(), "flash"):
             if not mn:
                 continue
             try:
-                text = (invoke_chat_text(prompt=prompt, model_name=mn) or "").strip()
+                text = (
+                    invoke_chat_text(
+                        prompt=prompt,
+                        model_name=mn,
+                        temperature=float(os.getenv("SONASID_NARRATE_TEMPERATURE", "0.4")),
+                    )
+                    or ""
+                ).strip()
             except Exception as e:
                 last_err = str(e) or repr(e)
                 text = ""
@@ -796,7 +808,7 @@ def process_question(question):
                     question=str(out.get("question") or question),
                     sql=str(sql_used) if sql_used else None,
                 )
-                out = finalize_user_response(out, q_in)
+                out = finalize_user_response(out, q_in, model_name=chat_model)
         except Exception:
             pass
         return out

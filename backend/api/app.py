@@ -340,7 +340,10 @@ def _run_chat_pipeline(
                 actor_name=actor,
             )
         elif should_use_kpi_pipeline(question) or should_force_kpi_pipeline(question):
-            res = soften_pipeline_failure(process_question(question), question)
+            res = soften_pipeline_failure(
+                process_question(question, model_name=model_name or ""),
+                question,
+            )
         else:
             res = conversational_reply(
                 question,
@@ -371,7 +374,7 @@ def _run_chat_pipeline(
                 except Exception:
                     pass
 
-            fallback = process_question(question)
+            fallback = process_question(question, model_name=model_name or "")
             if isinstance(fallback, dict):
                 fallback = dict(fallback)
                 fallback.setdefault("question", echo_question)

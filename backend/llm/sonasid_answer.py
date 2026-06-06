@@ -286,7 +286,80 @@ def _strip_formula_block(text: str) -> str:
     ).strip()
 
 
-def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]:
+def llm_enrich_brief_message(
+    out: Dict[str, Any],
+    *,
+    question: str,
+    model_name: str = "",
+) -> Dict[str, Any]:
+    """Reformule un brief multi-KPI via le modèle sélectionné (sans inventer de chiffres)."""
+    if not str(out.get("source") or "").startswith("sonasid:brief"):
+        return out
+    try:
+        from backend.llm.sonasid_open import is_sonasid_llm_narrate
+
+        if not is_sonasid_llm_narrate():
+            return out
+    except Exception:
+        return out
+
+    base = str(out.get("message") or "").strip()
+    if not base:
+        return out
+
+    sys = (
+        "Tu es analyste décisionnel Sonasid (port & arrivages de matières premières).\n"
+        "À partir des chiffres FACTUELS ci-dessous, rédige une synthèse intelligente en français "
+        "(4 à 8 phrases ou puces courtes) : lecture métier, tendances, comparaisons, points d'attention.\n"
+        "N'invente AUCUN chiffre — reprends uniquement ceux fournis. Ton professionnel, nuancé et clair.\n"
+    )
+    prompt = f"{sys}\n\nQuestion utilisateur :\n{question.strip()}\n\nDonnées factuelles :\n{base}\n"
+
+    text = ""
+    try:
+        from backend.agent.llm import invoke_chat_text
+
+        models: List[str] = []
+        for mn in (
+            (model_name or "").strip(),
+            (os.getenv("SONASID_NARRATE_MODEL", "") or "").strip(),
+            (os.getenv("SONASID_DEFAULT_CHAT_MODEL", "") or "").strip(),
+            "kimi",
+            "flash",
+        ):
+            if mn and mn not in models:
+                models.append(mn)
+        for mn in models:
+            try:
+                text = (
+                    invoke_chat_text(
+                        prompt=prompt,
+                        model_name=mn,
+                        temperature=float(os.getenv("SONASID_NARRATE_TEMPERATURE", "0.45")),
+                    )
+                    or ""
+                ).strip()
+            except Exception:
+                text = ""
+            if text:
+                break
+    except Exception:
+        text = ""
+
+    if not text:
+        return out
+    enriched = dict(out)
+    enriched["message"] = text
+    enriched["brief_llm_enriched"] = True
+    return enriched
+
+
+def finalize_user_response(
+    out: Dict[str, Any],
+    question: str,
+    *,
+    model_name: str = "",
+) -> Dict[str, Any]:
     """
     - Masque le SQL sauf demande explicite.
     - Ajoute un message en langage naturel si absent.
@@ -301,6 +374,7 @@ def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]
         return out
 
     if str(out.get("source") or "").startswith("sonasid:brief"):
+        out = llm_enrich_brief_message(out, question=question, model_name=model_name)
         out = dict(out)
         out.pop("formula", None)
         return out
@@ -344,7 +418,7 @@ def finalize_user_response(out: Dict[str, Any], question: str) -> Dict[str, Any]
     if src.startswith("llm:") or (
         src.startswith("sql:") and not out.get("message")
     ):
-        narrated = narrate_sql_result(q_for_msg, result)
+        narrated = narrate_sql_result(q_for_msg, result, model_name=model_name)
         if narrated:
             out = dict(out)
             out["message"] = narrated
