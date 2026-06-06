@@ -119,6 +119,7 @@ def main() -> int:
     )
 
     print("\n=== 5b. Schéma / tables (sans LLM) ===")
+    from backend.llm.conversational import should_use_kpi_pipeline
     from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
 
     schema_q = "Merci de me communiquer les noms des tables et leurs relations dans la base de données"
@@ -135,6 +136,44 @@ def main() -> int:
     ok_all &= check(
         "nombre tables → inventaire",
         is_schema_metadata_question(count_q) and "tables" in schema_metadata_reply(count_q).get("message", "").lower(),
+    )
+    nav_rep = schema_metadata_reply("structure de la table NAVIRE")
+    ok_all &= check(
+        "fiche NAVIRE dans dictionnaire",
+        "Navire_Nom" in str(nav_rep.get("message", "")) and "Navire_IMO" in str(nav_rep.get("message", "")),
+    )
+    qual_rep = schema_metadata_reply("champs table QUALITE")
+    ok_all &= check(
+        "fiche QUALITE dans dictionnaire",
+        "Qualite_Libelle" in str(qual_rep.get("message", "")),
+    )
+    flotte_rep = schema_metadata_reply("structure table FLOTTE")
+    ok_all &= check(
+        "fiche FLOTTE + lien TRANSFERT",
+        "Flotte_Immatriculation" in str(flotte_rep.get("message", ""))
+        and "TRANSFERT" in str(flotte_rep.get("message", "")),
+    )
+    ok_all &= check(
+        "diagramme inclut FLOTTE",
+        "FLOTTE" in schema_metadata_reply(schema_q).get("message", ""),
+    )
+    ok_all &= check(
+        "structure NAVIRE → pas KPI pipeline",
+        not should_use_kpi_pipeline("structure de la table NAVIRE"),
+    )
+    ok_all &= check(
+        "champs QUALITE → fiche dictionnaire",
+        "Qualite_Libelle" in schema_metadata_reply("champs table QUALITE").get("message", ""),
+    )
+    from backend.llm.sonasid_schema import extract_table_name_from_question
+
+    ok_all &= check(
+        "extract table NAVIRE",
+        extract_table_name_from_question("structure de la table NAVIRE") == "NAVIRE",
+    )
+    ok_all &= check(
+        "endpoint relations importable",
+        callable(__import__("backend.database.azure_sql", fromlist=["list_foreign_keys"]).list_foreign_keys),
     )
 
     print("\n=== 5. Questions ouvertes / vagues → brief ===")
@@ -202,6 +241,27 @@ def main() -> int:
         not is_sonasid_llm_first()
         or (os.getenv("SONASID_LLM_FIRST") or "").strip().lower() in {"1", "true", "yes", "on"},
         f"first={is_sonasid_llm_first()}",
+    )
+
+    print("\n=== 9. Résilience (essayer avant erreur) ===")
+    from backend.llm.sonasid_resilience import (
+        build_guidance_reply,
+        should_force_kpi_pipeline,
+        try_deterministic_sonasid_reply,
+    )
+
+    ok_all &= check(
+        "force KPI si règle existe",
+        should_force_kpi_pipeline("liste des navires en déchargement"),
+    )
+    ok_all &= check(
+        "schéma sans LLM",
+        try_deterministic_sonasid_reply("cite le nombre des tables") is not None,
+    )
+    guide = build_guidance_reply("question bizarre xyz")
+    ok_all &= check(
+        "guide sans chiffre inventé",
+        "Aucun chiffre" in guide.get("message", "") or "Questions que je sais" in guide.get("message", ""),
     )
 
     print("\n=== Résultat ===")

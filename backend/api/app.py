@@ -314,11 +314,18 @@ def _run_chat_pipeline(
             should_use_kpi_pipeline,
         )
         from backend.llm.llm_sql import normalize_user_question
+        from backend.llm.sonasid_resilience import (
+            should_force_kpi_pipeline,
+            soften_pipeline_failure,
+            try_deterministic_sonasid_reply,
+        )
 
         question = normalize_user_question(question)
 
-        # Salutations courtes — jamais via SQL ni long LLM (Trinity, etc.)
-        if is_pure_greeting(question):
+        det = try_deterministic_sonasid_reply(question)
+        if det:
+            res = det
+        elif is_pure_greeting(question):
             res = conversational_reply(
                 question,
                 actor_name=actor,
@@ -332,15 +339,15 @@ def _run_chat_pipeline(
                 model_name=model_name or "",
                 actor_name=actor,
             )
-        elif not should_use_kpi_pipeline(question):
+        elif should_use_kpi_pipeline(question) or should_force_kpi_pipeline(question):
+            res = soften_pipeline_failure(process_question(question), question)
+        else:
             res = conversational_reply(
                 question,
                 actor_name=actor,
                 session_id=session_id,
                 model_name=model_name or "",
             )
-        else:
-            res = process_question(question)
     except Exception as e:
         msg = str(e)
         is_rate_limit = "RateLimitError" in msg or "rate limit" in msg.lower() or "Error code: 429" in msg
@@ -490,12 +497,70 @@ def db_columns(request: Request, table: str, schema: str = "dbo") -> Dict[str, A
         return {"ok": False, "error": str(e) or repr(e)}
 
 
+@app.get("/db/relations")
+def db_relations(request: Request, table: str = "", schema: str = "dbo") -> Dict[str, Any]:
+    """Clés étrangères Azure SQL (optionnel : filtrer par table)."""
+    if not _session_user(request):
+        return {"ok": False, "authenticated": False, "error": "AUTH_REQUIRED"}
+    from backend.database.azure_sql import is_azure_provider, list_foreign_keys
+
+    if not is_azure_provider():
+        return {"ok": False, "error": "DB_PROVIDER doit être azure"}
+    try:
+        rels = list_foreign_keys(table=table.strip(), schema=schema)
+        return {"ok": True, "schema": schema, "table": table or None, "count": len(rels), "relations": rels}
+    except Exception as e:
+        return {"ok": False, "error": str(e) or repr(e)}
+
+
+@app.get("/db/schema")
+def db_schema_table(request: Request, table: str, schema: str = "dbo") -> Dict[str, Any]:
+    """Schéma complet d'une table : dictionnaire + colonnes + FK (pour debug / intégration)."""
+    if not _session_user(request):
+        return {"ok": False, "authenticated": False, "error": "AUTH_REQUIRED"}
+    t = (table or "").strip()
+    if not t:
+        return {"ok": False, "error": "Paramètre table requis"}
+    try:
+        from backend.llm.sonasid_schema import build_live_table_structure_message, extract_table_name_from_question
+
+        name = extract_table_name_from_question(f"table {t}") or t.upper()
+        message = build_live_table_structure_message(name)
+        from backend.database.azure_sql import is_azure_provider, list_columns, list_foreign_keys
+
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "table": name,
+            "schema": schema,
+            "message": message,
+            "source": "sonasid:schema+live",
+        }
+        if is_azure_provider():
+            try:
+                payload["columns"] = list_columns(table=name, schema=schema)
+                payload["relations"] = list_foreign_keys(table=name, schema=schema)
+            except Exception as e:
+                payload["live_error"] = str(e) or repr(e)
+        return payload
+    except Exception as e:
+        return {"ok": False, "error": str(e) or repr(e)}
+
+
 @app.get("/")
 def root() -> Dict[str, Any]:
     return {
         "name": "Sonasid KPI API",
         "status": "ok",
-        "endpoints": ["/healthz", "/db/status", "/db/tables", "/db/columns", "/chat", "/chat/retry"],
+        "endpoints": [
+            "/healthz",
+            "/db/status",
+            "/db/tables",
+            "/db/columns",
+            "/db/relations",
+            "/db/schema",
+            "/chat",
+            "/chat/retry",
+        ],
     }
 
 

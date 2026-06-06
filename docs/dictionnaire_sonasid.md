@@ -6,14 +6,15 @@ Utilisé pour les requêtes T-SQL (`AZURE_SQL_PROFILE=sonasid`) et l’agent.
 ## Modèle relationnel
 
 ```
-ARRIVAGE (1) ──< COMMANDE (1) ──< TRANSFERT
+ARRIVAGE (1) ──< COMMANDE (1) ──< TRANSFERT >── FLOTTE
+                    └── QUALITE
 ARRIVAGE (1) ──< NOMINATION_NAVIRE >── NAVIRE
                     ├── COMPAGNIE_MARITIME
                     └── TRANSITAIRE
 ARRIVAGE (1) ──< SUIVI_DECHARGEMENT >── SHIFT
 ```
 
-Tables de référence citées : FOURNISSEUR, BANQUE, PORT, QUALITE, DEVISE, UTILISATEUR, NAVIRE, STATUT, MOTIF_REJET, PRESTATAIRE, CONDUCTEUR, FLOTTE, NATURE_MARCHANDISE, AGENT_STOCK, MARCHANDISE_REMARQUE.
+Tables de référence citées : FOURNISSEUR, BANQUE, PORT, DEVISE, UTILISATEUR, STATUT, MOTIF_REJET, PRESTATAIRE, CONDUCTEUR, NATURE_MARCHANDISE, AGENT_STOCK, MARCHANDISE_REMARQUE.
 
 ---
 
@@ -189,16 +190,104 @@ Transfert port/stock → site ; double pesée.
 |-------|------|-------------|
 | `Transfert_Id` | INT (PK) | |
 | `Transfert_CommandeId` | INT (FK) | → COMMANDE |
-| `Transfert_NumeroDUM` | VARCHAR | |
-| `Transfert_Recepisse` | VARCHAR | |
+| `Transfert_NumeroDUM` | VARCHAR | N° DUM |
+| `Transfert_Recepisse` | VARCHAR | Récépissé |
 | `Transfert_Actif` | BIT | 1 = actif |
-| `Transfert_PremierePoids` / `DeuxiemePoids` | DECIMAL | Pesées |
+| `Transfert_PremierePoids` / `Transfert_DeuxiemePoids` | DECIMAL | Pesées |
 | `Transfert_PoidsNet` | DECIMAL | **PremierePoids − DeuxiemePoids** |
-| `Transfert_PrestataireChargementId` / `PrestataireTransfertId` | INT (FK) | PRESTATAIRE |
-| `Transfert_ConducteurId` | INT (FK) | CONDUCTEUR |
-| `Transfert_FlotteId` | INT (FK) | FLOTTE |
+| `Transfert_DatePremierePoids` / `Transfert_DateDeuxiemePoids` | DATETIME | Dates pesées |
+| `Transfert_PremierePoidsUserId` / `Transfert_DeuxiemePoidsUserId` | INT (FK) | Opérateurs pesée |
+| `Transfert_ReceptionSite` | VARCHAR | Site de réception |
+| `Transfert_MarchandiseRemarqueId` / `Transfert_MarchandiseRemarques` | INT / TEXT | Remarques marchandise |
+| `Transfert_PrestataireChargementId` / `Transfert_PrestataireTransfertId` | INT (FK) | → PRESTATAIRE |
+| `Transfert_ConducteurId` | INT (FK) | → CONDUCTEUR |
+| `Transfert_FlotteId` | INT (FK) | → FLOTTE (véhicule) |
+| `Transfert_StockAgentId` | INT (FK) | → AGENT_STOCK |
+| `Transfert_Commentaire` | TEXT | |
+| `Transfert_DateCreation` | DATETIME | |
+| `Transfert_UserId` | INT (FK) | |
 
-**POC** : `SUM(Transfert_PoidsNet)` + `COMMANDE` + `QUALITE`.
+**POC** : `SUM(Transfert_PoidsNet)` + `COMMANDE` + `QUALITE` ; lien camion via `Transfert_FlotteId` → `FLOTTE`.
+
+---
+
+## dbo.NAVIRE
+
+Référentiel des navires (identité, caractéristiques techniques, statut).
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `Navire_Id` | INT (PK) | Identifiant unique |
+| `Navire_Nom` | VARCHAR | Nom du navire |
+| `Navire_IMO` | VARCHAR | Numéro IMO |
+| `Navire_CompagnieId` | INT (FK) | Compagnie maritime |
+| `Navire_ImmatriculationPaysId` | INT (FK) | Pays d’immatriculation |
+| `Navire_ImmatriculationPortId` | INT (FK) | Port d’immatriculation |
+| `Navire_AnneeConstruction` | INT | Année de construction |
+| `Navire_LongueurMetres` | DECIMAL | Longueur (m) |
+| `Navire_LargeurMetres` | DECIMAL | Largeur (m) |
+| `Navire_TonnageBrut` | DECIMAL | Tonnage brut |
+| `Navire_TonnageNet` | DECIMAL | Tonnage net |
+| `Navire_DeadweightTonnage` | DECIMAL | Port en lourd (DWT) |
+| `Navire_Observations` | TEXT | Observations |
+| `Navire_DateValidationStatut` | DATETIME | Validation statut |
+| `Navire_Active` | BIT | 1 = actif (KPI « navires actifs ») |
+| `Navire_DateCreation` | DATETIME | Date création fiche |
+
+### Relations FK
+
+`NOMINATION_NAVIRE.NominationNavire_NavireId` → NAVIRE ; un navire peut être nominé sur plusieurs arrivages.
+
+**POC** : jointure `ARRIVAGE → NOMINATION_NAVIRE → NAVIRE` pour navires en déchargement, tonnage par navire, classements.
+
+---
+
+## dbo.QUALITE
+
+Référentiel des qualités / grades de marchandise.
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `Qualite_Id` | INT (PK) | Identifiant unique |
+| `Qualite_Libelle` | VARCHAR | Libellé affiché (KPI) |
+| `Qualite_Active` | BIT | 1 = active (filtre par défaut POC) |
+| `Qualite_Affectation` | VARCHAR | Affectation métier |
+
+### Relations FK
+
+`COMMANDE.Commande_QualiteId` → QUALITE ; `ARRIVAGE` peut aussi référencer QUALITE via `Arrivage_QualiteDepartId`, `Arrivage_QualiteArriveeId`, `Arrivage_QualiteMoyenneId`.
+
+**POC** : `GROUP BY Qualite_Libelle` pour tonnage commandé / transféré par qualité.
+
+---
+
+## dbo.FLOTTE
+
+Parc de véhicules (camions) pour les transferts port → site.
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `Flotte_Id` | INT (PK) | Identifiant unique |
+| `Flotte_TransporteurId` | INT (FK) | Transporteur |
+| `Flotte_TypeFlotteId` | INT (FK) | Type de véhicule |
+| `Flotte_Immatriculation` | VARCHAR | Immatriculation |
+| `Flotte_DateMiseEnService` | DATE | Mise en service |
+| `Flotte_CapaciteTonnes` | DECIMAL | Capacité (t) |
+| `Flotte_GPSID` | VARCHAR | Identifiant GPS |
+| `Flotte_ConducteurNom` | VARCHAR | Nom conducteur |
+| `Flotte_ConducteurPrenom` | VARCHAR | Prénom conducteur |
+| `Flotte_ConducteurCIN` | VARCHAR | CIN conducteur |
+| `Flotte_Blacklisted` | BIT | Liste noire |
+| `Flotte_Actif` | BIT | 1 = actif |
+| `Flotte_DateCreation` | DATETIME | |
+| `Flotte_UserId` | INT (FK) | |
+| `Flotte_Flux` | VARCHAR | Flux / sens |
+
+### Relations FK
+
+`TRANSFERT.Transfert_FlotteId` → FLOTTE ; `TRANSFERT.Transfert_ConducteurId` → CONDUCTEUR (référentiel séparé).
+
+**POC** : extension possible — « quel camion pour ce transfert » via `TRANSFERT JOIN FLOTTE`.
 
 ---
 

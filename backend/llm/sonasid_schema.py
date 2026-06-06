@@ -7,7 +7,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def _project_root() -> Path:
@@ -106,6 +106,20 @@ def is_schema_metadata_question(text: str) -> bool:
         r"\b(noms?\s+des\s+tables|tables\s+et\s+leurs\s+relations|mod[eè]le\s+relationnel)\b", ql
     ):
         return True
+    # « structure / champs de la table NAVIRE » — table métier connue
+    known = "|".join(re.escape(t) for t in sorted(allowed_table_names(), key=len, reverse=True))
+    if known and re.search(
+        rf"\b(structure|champs|colonnes|d[eé]finition|description|d[eé]tail)\b.{0,80}\b(?:table|dbo\.)\s*({known})\b",
+        ql,
+        re.I,
+    ):
+        return True
+    if known and re.search(
+        rf"\b(?:table|dbo\.)\s*({known})\b.{0,60}\b(structure|champs|colonnes|d[eé]finition|description|d[eé]tail)\b",
+        ql,
+        re.I,
+    ):
+        return True
     has_table = bool(
         re.search(r"\b(tables?|sch[eé]ma|dictionnaire|bdd|base\s+de\s+donn[eé]es)\b", ql)
     )
@@ -148,6 +162,105 @@ def _query_live_tables() -> tuple[list[dict[str, str]] | None, str | None]:
         return list_tables(schema="dbo", limit=500), None
     except Exception as e:
         return None, str(e) or repr(e)
+
+
+def extract_table_name_from_question(question: str) -> Optional[str]:
+    """Nom de table métier reconnu dans la question (NAVIRE, ARRIVAGE…)."""
+    q = (question or "").strip()
+    if not q:
+        return None
+    known = sorted(allowed_table_names(), key=len, reverse=True)
+    pat = "|".join(re.escape(t) for t in known)
+    m = re.search(
+        rf"\b(?:table|dbo\.)\s*({pat})\b",
+        q,
+        re.I,
+    )
+    if m:
+        return m.group(1).upper()
+    m2 = re.search(rf"\b({pat})\b", q, re.I)
+    if m2 and re.search(r"\b(structure|champs|colonnes|sch[eé]ma|relations?)\b", q, re.I):
+        return m2.group(1).upper()
+    return None
+
+
+def _query_live_columns(table: str) -> tuple[list[dict[str, Any]] | None, str | None]:
+    try:
+        from backend.database.azure_sql import is_azure_provider, list_columns
+
+        if not is_azure_provider():
+            return None, "base locale"
+        return list_columns(table=table, schema="dbo"), None
+    except Exception as e:
+        return None, str(e) or repr(e)
+
+
+def _query_live_foreign_keys(table: str = "") -> tuple[list[dict[str, str]] | None, str | None]:
+    try:
+        from backend.database.azure_sql import is_azure_provider, list_foreign_keys
+
+        if not is_azure_provider():
+            return None, "base locale"
+        return list_foreign_keys(table=table, schema="dbo"), None
+    except Exception as e:
+        return None, str(e) or repr(e)
+
+
+def build_live_table_structure_message(table: str, question: str = "") -> str:
+    """Dictionnaire + colonnes live Azure + FK — sans LLM."""
+    name = (table or "").strip().upper().replace("DBO.", "")
+    if not name:
+        return build_schema_overview_message(question)
+
+    doc = _table_section_from_markdown(name)
+    cols, col_err = _query_live_columns(name)
+    fks, fk_err = _query_live_foreign_keys(name)
+
+    lines = [f"**Table dbo.{name}**", ""]
+
+    if doc:
+        lines.append("### Dictionnaire métier (POC)")
+        lines.append(doc)
+        lines.append("")
+
+    if cols is not None:
+        lines.append(f"### Colonnes live Azure SQL ({len(cols)} champs)")
+        lines.append("")
+        lines.append("| Colonne | Type | Nullable | Identity |")
+        lines.append("|---------|------|----------|----------|")
+        for c in cols[:60]:
+            lines.append(
+                f"| `{c.get('name')}` | {c.get('type')} | "
+                f"{'oui' if c.get('nullable') else 'non'} | "
+                f"{'oui' if c.get('identity') else 'non'} |"
+            )
+        if len(cols) > 60:
+            lines.append(f"\n_… et {len(cols) - 60} colonnes supplémentaires._")
+        lines.append("")
+        lines.append("_Source : `INFORMATION_SCHEMA.COLUMNS` sur la base connectée._")
+    elif col_err:
+        lines.append(f"_Colonnes live indisponibles ({col_err})._")
+
+    if fks is not None and fks:
+        lines.append("")
+        lines.append("### Relations (clés étrangères live)")
+        lines.append("")
+        for fk in fks[:25]:
+            lines.append(
+                f"- `{fk.get('from_table')}.{fk.get('from_column')}` → "
+                f"`{fk.get('to_table')}.{fk.get('to_column')}`"
+            )
+        if len(fks) > 25:
+            lines.append(f"_… et {len(fks) - 25} relations supplémentaires._")
+        lines.append("")
+        lines.append("_Source : `sys.foreign_keys` sur Azure SQL._")
+    elif fk_err and not fks:
+        pass
+
+    if not doc and cols is None:
+        return build_schema_overview_message(question, _from_live_fallback=True)
+
+    return "\n".join(lines)
 
 
 def build_table_inventory_message(question: str = "") -> str:
@@ -215,20 +328,26 @@ def _table_section_from_markdown(table: str) -> str:
     return body
 
 
-def build_schema_overview_message(question: str = "") -> str:
+def build_schema_overview_message(question: str = "", *, _from_live_fallback: bool = False) -> str:
     ql = (question or "").lower()
+    if not _from_live_fallback:
+        table = extract_table_name_from_question(question or "")
+        if table:
+            return build_live_table_structure_message(table, question)
+
     m_table = re.search(r"\b(?:table|dbo\.)\s*([A-Z_a-z][A-Z_a-z0-9_]*)\b", question or "", re.I)
-    if m_table:
+    if m_table and not _from_live_fallback:
         section = _table_section_from_markdown(m_table.group(1))
         if section:
-            return f"**Table dbo.{m_table.group(1).upper()}**\n\n{section}"
+            return build_live_table_structure_message(m_table.group(1).upper(), question)
 
     lines = [
         "**Schéma Sonasid — port & arrivages**",
         "",
         "**Modèle relationnel**",
         "```",
-        "ARRIVAGE (1) ──< COMMANDE (1) ──< TRANSFERT",
+        "ARRIVAGE (1) ──< COMMANDE (1) ──< TRANSFERT >── FLOTTE",
+        "                    └── QUALITE",
         "ARRIVAGE (1) ──< NOMINATION_NAVIRE >── NAVIRE",
         "                    ├── COMPAGNIE_MARITIME",
         "                    └── TRANSITAIRE",
@@ -238,18 +357,20 @@ def build_schema_overview_message(question: str = "") -> str:
         "**Tables KPI (requêtes chatbot)**",
         "- **ARRIVAGE** — cycle arrivage, tonnage importé (`Arrivage_TonnageTotal`), déchargement",
         "- **COMMANDE** — commandes liées (`Commande_QualiteId`, `Commande_Tonnage`)",
-        "- **TRANSFERT** — transferts (`Transfert_PoidsNet`, `Transfert_CommandeId`)",
-        "- **NAVIRE** + **NOMINATION_NAVIRE** — navire rattaché à un arrivage",
-        "- **QUALITE** — libellés matières (`Qualite_Libelle`)",
+        "- **TRANSFERT** — transferts (`Transfert_PoidsNet`, `Transfert_CommandeId`, `Transfert_FlotteId`)",
+        "- **NAVIRE** + **NOMINATION_NAVIRE** — navire rattaché à un arrivage (`Navire_Nom`, `Navire_Active`)",
+        "- **QUALITE** — libellés matières (`Qualite_Libelle`, `Qualite_Active`)",
+        "- **FLOTTE** — véhicules transfert (`Flotte_Immatriculation`, conducteur embarqué)",
         "- **FOURNISSEUR** — fournisseurs (`Arrivage_FournisseurId`)",
         "- **SUIVI_DECHARGEMENT** — quantités déchargées par shift",
         "",
         "**Référentiels** : PORT, BANQUE, DEVISE, SHIFT, STATUT, UTILISATEUR, "
-        "NATURE_MARCHANDISE, PRESTATAIRE, CONDUCTEUR, FLOTTE, …",
+        "NATURE_MARCHANDISE, PRESTATAIRE, CONDUCTEUR, …",
         "",
         "**Jointures usuelles**",
         "- Tonnage transféré : `TRANSFERT → COMMANDE → ARRIVAGE` (+ `QUALITE`)",
         "- Navire : `ARRIVAGE → NOMINATION_NAVIRE → NAVIRE`",
+        "- Camion / flotte : `TRANSFERT → FLOTTE`",
         "- Fournisseur : `ARRIVAGE → FOURNISSEUR`",
         "",
         "Pour le détail d’une table : « structure de la table COMMANDE » ou « champs ARRIVAGE ».",
@@ -264,7 +385,7 @@ def build_schema_overview_message(question: str = "") -> str:
             lines.append("")
             lines.append(
                 "_Le dictionnaire complet est dans `docs/dictionnaire_sonasid.md` "
-                "(15+ tables documentées)._"
+                "(8 tables cœur documentées + référentiels)._"
             )
     return "\n".join(lines)
 

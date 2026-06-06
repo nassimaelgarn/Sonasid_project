@@ -497,6 +497,13 @@ def process_question(question):
     _open_expanded = False
     _expand_notice: Optional[str] = None
     try:
+        from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
+
+        if is_schema_metadata_question(q_in):
+            return schema_metadata_reply(q_in)
+    except Exception:
+        pass
+    try:
         from backend.llm.sonasid_sql import expand_sonasid_open_question
 
         _before_expand = q_in
@@ -1556,6 +1563,20 @@ def process_question(question):
                     }
                 )
     if re.search(r"\bnavires?\b", ql) and not re.search(r"\barrivages?\b", ql):
+        try:
+            from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
+
+            if is_schema_metadata_question(question):
+                rep = schema_metadata_reply(question)
+                return attach_rewrite(
+                    {
+                        "question": question,
+                        "message": rep.get("message"),
+                        "source": rep.get("source", "sonasid:schema"),
+                    }
+                )
+        except Exception:
+            pass
         if re.search(r"\btransf", ql) and re.search(r"\bqualit", ql, re.I):
             pass
         elif re.search(r"\bd[eéè]charg", ql, re.I) and re.search(

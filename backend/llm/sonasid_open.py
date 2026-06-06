@@ -75,6 +75,13 @@ def looks_like_sonasid_data_question(text: str) -> bool:
     t = (text or "").strip()
     if not t or len(t) < 3:
         return False
+    try:
+        from backend.llm.sonasid_schema import is_schema_metadata_question
+
+        if is_schema_metadata_question(t):
+            return False
+    except Exception:
+        pass
     if _SONASID_DOMAIN.search(t):
         return True
     if re.search(r"\b(combien|nombre|total|liste|top|quels|quelles|compare|évolution|evolution|tendance)\b", t, re.I):

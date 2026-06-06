@@ -41,6 +41,13 @@ def should_use_kpi_pipeline(text: str) -> bool:
         return False
     if is_pure_greeting(t):
         return False
+    try:
+        from backend.llm.sonasid_schema import is_schema_metadata_question
+
+        if is_schema_metadata_question(t):
+            return False
+    except Exception:
+        pass
     if is_same_kpi_followup_text(t):
         return True
     try:
@@ -179,6 +186,11 @@ def conversational_reply(
     from backend.agent.llm import invoke_chat_text
 
     models = []
+    preferred = (model_name or "").strip().lower()
+    if preferred in {"trinity", "mistral"}:
+        for mn in ("flash", preferred):
+            if mn not in models:
+                models.append(mn)
     for mn in (
         (model_name or "").strip(),
         (os.getenv("OPENROUTER_CHAT_FALLBACK", "") or "").strip(),
@@ -200,16 +212,22 @@ def conversational_reply(
             break
 
     if not text:
+        try:
+            from backend.llm.sonasid_resilience import build_guidance_reply
+
+            if not is_pure_greeting(q):
+                return build_guidance_reply(q)
+        except Exception:
+            pass
         if not is_pure_greeting(q):
             text = (
-                "Je n'ai pas pu répondre via le chat pour l'instant. "
-                "Choisis le modèle **Flash** dans le panneau de gauche, ou reformule ta question."
+                "Je n’ai pas pu produire une réponse fiable pour l’instant. "
+                "Précise période et indicateur (ex. tonnage importé en 2025), "
+                "ou demande le schéma des tables."
             )
         else:
             text = _greeting_message(actor_name)
-        if last_err and not is_pure_greeting(q):
-            pass  # pas de message technique sur une vraie question métier
-        elif last_err:
+        if last_err and is_pure_greeting(q):
             text += (
                 "\n\n_(Modèle cloud indisponible — essaie **Flash**.)_"
             )

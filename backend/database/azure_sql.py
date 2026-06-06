@@ -132,6 +132,47 @@ def list_columns(table: str, schema: str = "dbo") -> List[Dict[str, Any]]:
     ]
 
 
+def list_foreign_keys(table: str = "", schema: str = "dbo") -> List[Dict[str, str]]:
+    """Clés étrangères dbo — filtre optionnel par table (parent ou référencée)."""
+    s = (schema or "dbo").strip()
+    t = (table or "").strip()
+    sql = (
+        "SELECT "
+        "tp.name AS parent_table, cp.name AS parent_column, "
+        "tr.name AS referenced_table, cr.name AS referenced_column, "
+        "fk.name AS constraint_name "
+        "FROM sys.foreign_keys fk "
+        "INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id "
+        "INNER JOIN sys.tables tp ON fkc.parent_object_id = tp.object_id "
+        "INNER JOIN sys.schemas ps ON tp.schema_id = ps.schema_id "
+        "INNER JOIN sys.columns cp ON fkc.parent_object_id = cp.object_id "
+        "AND fkc.parent_column_id = cp.column_id "
+        "INNER JOIN sys.tables tr ON fkc.referenced_object_id = tr.object_id "
+        "INNER JOIN sys.columns cr ON fkc.referenced_object_id = cr.object_id "
+        "AND fkc.referenced_column_id = cr.column_id "
+        "WHERE ps.name = ? "
+    )
+    params: List[Any] = [s]
+    if t:
+        sql += "AND (tp.name = ? OR tr.name = ?) "
+        params.extend([t, t])
+    sql += "ORDER BY tp.name, cp.name"
+    with azure_connect() as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    return [
+        {
+            "from_table": r[0],
+            "from_column": r[1],
+            "to_table": r[2],
+            "to_column": r[3],
+            "constraint": r[4],
+        }
+        for r in rows
+    ]
+
+
 def sample_rows(table: str, schema: str = "dbo", top: int = 5) -> Tuple[List[str], List[List[Any]]]:
     """SELECT TOP n * — table name validée (identifiant simple)."""
     t = (table or "").strip()
