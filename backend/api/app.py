@@ -880,6 +880,19 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
             except Exception:
                 pass
             return res
+        from backend.llm.sonasid_schema import company_overview_reply, is_sonasid_company_question
+
+        if is_sonasid_company_question(q_schema):
+            try:
+                add_memory(session_id=sid, role="user", content=q_raw)
+            except Exception:
+                pass
+            res = company_overview_reply(q_schema)
+            try:
+                add_memory(session_id=sid, role="assistant", content=_assistant_memory_content(res))
+            except Exception:
+                pass
+            return res
     except Exception:
         pass
 

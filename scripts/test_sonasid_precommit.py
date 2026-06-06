@@ -306,6 +306,18 @@ def main() -> int:
     ok_all &= check("slug grok", resolve_chat_model("grok") == "azure-inference/grok-4.3")
     ok_all &= check("slug deepseek", resolve_chat_model("deepseek") == "azure/DeepSeek-V4-Pro")
 
+    print("\n=== 11. Présentation entreprise Sonasid ===")
+    from backend.llm.sonasid_schema import company_overview_reply, is_sonasid_company_question
+
+    q_co = "je veux avoir une idée sur l entreprise Sonasid"
+    ok_all &= check("détecte question entreprise", is_sonasid_company_question(q_co))
+    rep_co = company_overview_reply(q_co)
+    ok_all &= check(
+        "réponse entreprise avec métier",
+        rep_co.get("source") == "sonasid:company"
+        and "logistique portuaire" in rep_co.get("message", "").lower(),
+    )
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

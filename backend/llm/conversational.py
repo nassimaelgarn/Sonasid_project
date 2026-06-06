@@ -42,9 +42,11 @@ def should_use_kpi_pipeline(text: str) -> bool:
     if is_pure_greeting(t):
         return False
     try:
-        from backend.llm.sonasid_schema import is_schema_metadata_question
+        from backend.llm.sonasid_schema import is_schema_metadata_question, is_sonasid_company_question
 
         if is_schema_metadata_question(t):
+            return False
+        if is_sonasid_company_question(t):
             return False
     except Exception:
         pass
@@ -139,10 +141,17 @@ def conversational_reply(
         }
 
     try:
-        from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
+        from backend.llm.sonasid_schema import (
+            company_overview_reply,
+            is_schema_metadata_question,
+            is_sonasid_company_question,
+            schema_metadata_reply,
+        )
 
         if is_schema_metadata_question(q):
             return schema_metadata_reply(q)
+        if is_sonasid_company_question(q):
+            return company_overview_reply(q)
     except Exception:
         pass
 

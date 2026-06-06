@@ -146,6 +146,131 @@ def is_schema_metadata_question(text: str) -> bool:
     return False
 
 
+def is_sonasid_company_question(text: str) -> bool:
+    """Question sur Sonasid / l'activité métier (pas un KPI chiffré)."""
+    if not _is_sonasid_profile():
+        return False
+    if is_schema_metadata_question(text):
+        return False
+    ql = re.sub(r"\s+", " ", (text or "").lower()).strip()
+    if not ql:
+        return False
+    if re.search(
+        r"\b(qu['']est|quest ce|c['']est quoi|parle|presente|présente|explique|decris|décris)\b",
+        ql,
+    ) and re.search(r"\b(sonasid|entreprise|soci[eé]t[eé]|activit[eé]|m[eé]tier)\b", ql):
+        return True
+    if re.search(r"\bsonasid\b", ql) and re.search(
+        r"\b(entreprise|soci[eé]t[eé]|activit[eé]|m[eé]tier|id[eé]e|contexte|pr[eé]sentation)\b",
+        ql,
+    ):
+        return True
+    if re.search(r"\b(id[eé]e|avoir une id[eé]e|une id[eé]e sur)\b", ql) and re.search(
+        r"\b(entreprise|soci[eé]t[eé]|sonasid)\b", ql
+    ):
+        return True
+    if re.search(r"\b(que fait|ce que fait|à quoi sert|a quoi sert)\b", ql) and re.search(
+        r"\b(sonasid|entreprise|soci[eé]t[eé]|assistant|chatbot|application)\b", ql
+    ):
+        return True
+    return False
+
+
+def _fmt_overview_num(v: Any) -> str:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if abs(x - round(x)) < 1e-6:
+        return f"{int(round(x)):,}".replace(",", " ")
+    return f"{x:,.2f}".replace(",", " ").replace(".", ",")
+
+
+def build_company_overview_message(question: str = "") -> str:
+    """Présentation Sonasid + aperçu chiffré depuis Azure SQL (si connecté)."""
+    from backend.database.run_query import run_query
+    from backend.llm.sonasid_sql import T_ARRIVAGE, T_NAVIRE
+
+    kpi_ref = sorted(allowed_table_names())
+    live_lines: list[str] = []
+    try:
+        tables, err = _query_live_tables()
+        if tables is not None:
+            names = [str(t.get("name") or "") for t in tables if t.get("name")]
+            kpi_in_db = [n for n in names if n.upper() in kpi_ref]
+            live_lines.append(f"- **Tables en base** : **{len(names)}** ({len(kpi_in_db)} métier POC)")
+        elif err:
+            live_lines.append(f"- _Connexion SQL indisponible_ ({str(err)[:80]})")
+    except Exception:
+        pass
+
+    def _scalar(sql: str) -> Optional[float]:
+        try:
+            res = run_query(sql)
+            if isinstance(res, str) or not res or not res[0]:
+                return None
+            v = res[0][0]
+            return float(v) if v is not None else None
+        except Exception:
+            return None
+
+    nav = _scalar(f"SELECT COUNT(*) FROM {T_NAVIRE} WHERE Navire_Active = 1")
+    arr = _scalar(f"SELECT COUNT(*) FROM {T_ARRIVAGE} WHERE Arrivage_Actif = 1")
+    ton = _scalar(
+        f"SELECT SUM(COALESCE(Arrivage_TonnageTotal, 0)) FROM {T_ARRIVAGE} WHERE Arrivage_Actif = 1"
+    )
+    if nav is not None:
+        live_lines.append(f"- **Navires actifs** (référentiel) : **{_fmt_overview_num(nav)}**")
+    if arr is not None:
+        live_lines.append(f"- **Arrivages enregistrés** : **{_fmt_overview_num(arr)}**")
+    if ton is not None:
+        live_lines.append(f"- **Tonnage importé cumulé** : **{_fmt_overview_num(ton)}** t")
+
+    lines = [
+        "**Sonasid — activité couverte par cet assistant**",
+        "",
+        "**Sonasid** est un grand groupe sidérurgique marocain. Ce POC se concentre sur la "
+        "**logistique portuaire & maritime** : arrivée des navires cargo, importation de matières "
+        "premières, suivi des déchargements, tonnages, fournisseurs, qualités et flotte camions.",
+        "",
+        "**Chaîne métier modélisée en base**",
+        "- **NAVIRE** — bateaux cargo (nom, IMO, compagnie…)",
+        "- **ARRIVAGE** — cycle portuaire, tonnage importé, déchargement",
+        "- **COMMANDE** / **QUALITE** — matières commandées par qualité",
+        "- **TRANSFERT** / **FLOTTE** — camions et tonnage transféré",
+        "- **FOURNISSEUR** — origine des importations",
+        "",
+    ]
+    if live_lines:
+        lines.extend(["**Aperçu depuis la base connectée**", ""])
+        lines.extend(live_lines)
+        lines.append("")
+        lines.append("_Chiffres lus directement sur Azure SQL — aucune invention._")
+    else:
+        lines.append(
+            "_Connectez la base Azure (`DB_PROVIDER=azure`) pour afficher les volumes réels._"
+        )
+        lines.append("")
+    lines.extend(
+        [
+            "**Pour aller plus loin**",
+            "- `un petit récap sur 2025` — synthèse multi-KPI",
+            "- `tonnage importé en 2025` — indicateur avec période",
+            "- `nombre de navires actifs` — référentiel maritime",
+            "- `résumé sur toutes les tables de la base` — inventaire schéma",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def company_overview_reply(question: str) -> Dict[str, Any]:
+    return {
+        "question": (question or "").strip(),
+        "message": build_company_overview_message(question),
+        "source": "sonasid:company",
+    }
+
+
 def _schema_live_timeout_s() -> float:
     try:
         return float(os.getenv("AZURE_SQL_SCHEMA_TIMEOUT", "8") or "8")
