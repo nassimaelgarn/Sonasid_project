@@ -21,6 +21,20 @@ export function defaultKpiApiBase() {
 }
 
 export function kpiApiBase() {
+  if (typeof window !== 'undefined') {
+    const { protocol, origin, port } = window.location
+    const p = String(port || '')
+    // Derrière nginx (80/443) : toujours same-origin, jamais :8001 direct.
+    if (!import.meta.env.DEV && (!p || p === '80' || p === '443')) {
+      return origin.replace(/\/$/, '')
+    }
+    const envBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+    // Évite mixed-content (page HTTPS → API HTTP bloquée par le navigateur).
+    if (envBase && protocol === 'https:' && envBase.startsWith('http://')) {
+      return origin.replace(/\/$/, '')
+    }
+  }
+
   let raw = (import.meta.env.VITE_API_BASE || defaultKpiApiBase()).replace(/\/$/, '')
   raw = raw.replace(/^http:\/\/127\.0\.0\.1(?=:)/, 'http://localhost')
   return raw

@@ -17,20 +17,33 @@ grep -q '^CORS_ORIGINS=' "$ENV_FILE" && sed -i.bak \
   "s|^CORS_ORIGINS=.*|CORS_ORIGINS=$CORS_VAL|" \
   "$ENV_FILE" || echo "CORS_ORIGINS=$CORS_VAL" >> "$ENV_FILE"
 
-echo "==> Test API login (localhost)"
+echo "==> PM2 restart (backend d'abord)"
+pm2 restart my-backend --update-env || pm2 start my-backend --update-env || true
+sleep 2
+pm2 restart my-frontend --update-env || pm2 start my-frontend --update-env || true
+sleep 2
+pm2 status || true
+
+echo "==> Test healthz (localhost:8001)"
+if curl -sf http://127.0.0.1:8001/healthz | head -c 120; then
+  echo ""
+  echo "backend OK"
+else
+  echo ""
+  echo "WARN: backend KO sur :8001 — voir: pm2 logs my-backend --lines 40"
+fi
+
+echo "==> Test login local"
 curl -sf -X POST http://127.0.0.1:8001/auth/local/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"abdelkaioume.ammour","password":"Am1122"}' | head -c 120
+  -d '{"username":"abdelkaioume.ammour","password":"Am1122"}' | head -c 120 \
+  || echo "(login local KO)"
 echo ""
 
-echo "==> Test API via nginx HTTPS (si configuré)"
-curl -sfk -X POST "https://sonasid-alexsys.westeurope.cloudapp.azure.com/auth/local/login" \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"abdelkaioume.ammour","password":"Am1122"}' 2>/dev/null | head -c 120 || echo "(nginx pas encore configuré — lance bash scripts/vm_setup_nginx.sh)"
+echo "==> Test via nginx HTTPS"
+curl -sfk https://sonasid-alexsys.westeurope.cloudapp.azure.com/healthz | head -c 120 \
+  || echo "(healthz HTTPS KO — vérifier nginx + backend)"
 echo ""
-
-echo "==> PM2 restart"
-pm2 restart my-backend my-frontend --update-env
 
 echo ""
 echo "URLs :"
