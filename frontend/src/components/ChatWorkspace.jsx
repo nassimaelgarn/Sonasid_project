@@ -1,6 +1,12 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { kpiApiBase } from '../lib/apiBase'
 import {
+  DEFAULT_CHAT_MODEL_ID,
+  DEFAULT_CHAT_MODEL_OPTIONS,
+  fetchChatModelOptions,
+  normalizeStoredModelId,
+} from '../lib/chatModels'
+import {
   detectSttCapabilities,
   pickRecorderMimeType,
   primeMicrophoneAccess,
@@ -193,12 +199,6 @@ function IconGear({ className }) {
     </svg>
   )
 }
-
-const CHAT_MODEL_OPTIONS = [
-  { id: 'trinity', label: 'Trinity', hint: 'Cloud · OpenRouter', dot: 'bg-blue-500' },
-  { id: 'flash', label: 'Flash', hint: 'Cloud · rapide', dot: 'bg-fuchsia-500' },
-  { id: 'ollama', label: 'Llama3.1', hint: 'Local · Ollama', dot: 'bg-emerald-500' },
-]
 
 function IconThumbUp({ className }) {
   return (
@@ -1142,16 +1142,15 @@ function getOrCreateCurrentSessionId() {
   return sid
 }
 
-function getOrCreateModelForSession(sessionId) {
+function getOrCreateModelForSession(sessionId, defaultId = DEFAULT_CHAT_MODEL_ID) {
   const key = `sonasid_model_${sessionId}`
   const existing = localStorage.getItem(key)
   if (existing) {
-    // Backward-compat: old preset key was "mistral" for the Flash model
-    if (existing === 'mistral') return 'flash'
-    return existing
+    return normalizeStoredModelId(existing)
   }
-  localStorage.setItem(key, 'trinity')
-  return 'trinity'
+  const d = normalizeStoredModelId(defaultId)
+  localStorage.setItem(key, d)
+  return d
 }
 
 function setModelForSession(sessionId, modelName) {
@@ -1646,6 +1645,24 @@ export default function ChatWorkspace() {
   const sttRecorderMimeRef = useRef('')
   const modelPickerRef = useRef(null)
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
+  const [chatModelOptions, setChatModelOptions] = useState(DEFAULT_CHAT_MODEL_OPTIONS)
+
+  const activeModelMeta = useMemo(
+    () => chatModelOptions.find((o) => o.id === modelName) || { id: modelName, label: modelName, hint: '' },
+    [chatModelOptions, modelName],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const opts = await fetchChatModelOptions(baseUrl)
+      if (cancelled || !opts?.length) return
+      setChatModelOptions(opts)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [baseUrl])
 
   const isWelcomeOnly = Array.isArray(chat) && chat.length === 0
   const welcomeExamples = useMemo(() => pickRandomSonasidExamples(5), [sessionId])
@@ -2623,7 +2640,7 @@ export default function ChatWorkspace() {
               <span className="chip">
                 Modèle{' '}
                 <span className="ml-1 font-mono">
-                  {modelName === 'ollama' ? 'llama3.1:8b (local)' : modelName}
+                  {modelName === 'ollama' ? 'llama3.1:8b (local)' : activeModelMeta.label || modelName}
                 </span>
               </span>
               <span className="chip">
@@ -2847,47 +2864,24 @@ export default function ChatWorkspace() {
                 <div className="mt-3 grid gap-4">
                   <div>
                     <div className="text-[11px] font-medium text-slate-600 dark:text-slate-400">Modèle</div>
-                    <div className="mt-1 grid grid-cols-3 gap-1 rounded-xl border border-slate-200/70 dark:border-slate-600/50 bg-white/60 dark:bg-slate-800/35 p-1">
-                      <button
-                        type="button"
-                        className={clsx(
-                          'min-w-0 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-200 flex items-center justify-center gap-2',
-                          modelName === 'trinity'
-                            ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-white/80 dark:hover:bg-slate-700/45',
-                        )}
-                        onClick={() => onChangeModel('trinity')}
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500/80" />
-                        Trinity
-                      </button>
-                      <button
-                        type="button"
-                        className={clsx(
-                          'min-w-0 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-200 flex items-center justify-center gap-2',
-                          modelName === 'flash'
-                            ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-white/80 dark:hover:bg-slate-700/45',
-                        )}
-                        onClick={() => onChangeModel('flash')}
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500/80" />
-                        Flash
-                      </button>
-                      <button
-                        type="button"
-                        className={clsx(
-                          'min-w-0 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-200 flex items-center justify-center gap-2',
-                          modelName === 'ollama'
-                            ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-white/80 dark:hover:bg-slate-700/45',
-                        )}
-                        onClick={() => onChangeModel('ollama')}
-                        title="Local via Ollama (llama3.1:8b)"
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80" />
-                        Llama3.1
-                      </button>
+                    <div className="mt-1 flex flex-wrap gap-1 rounded-xl border border-slate-200/70 dark:border-slate-600/50 bg-white/60 dark:bg-slate-800/35 p-1">
+                      {chatModelOptions.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={clsx(
+                            'min-w-0 rounded-lg px-2.5 py-2 text-xs font-medium transition-all duration-200 flex items-center justify-center gap-1.5',
+                            modelName === opt.id
+                              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                              : 'text-slate-600 dark:text-slate-400 hover:bg-white/80 dark:hover:bg-slate-700/45',
+                          )}
+                          onClick={() => onChangeModel(opt.id)}
+                          title={opt.hint || opt.label}
+                        >
+                          <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', opt.dot || 'bg-blue-500')} />
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
                       <span className="inline-flex items-center gap-1">
@@ -3742,7 +3736,7 @@ export default function ChatWorkspace() {
                       <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Modèle pour ce chat
                       </div>
-                      {CHAT_MODEL_OPTIONS.map((opt) => (
+                      {chatModelOptions.map((opt) => (
                         <button
                           key={opt.id}
                           type="button"

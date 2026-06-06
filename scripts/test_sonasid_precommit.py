@@ -287,6 +287,15 @@ def main() -> int:
     )
     ok_all &= check("1 mois sans flèche redondante", "janvier 2026" in one and "→" not in one)
 
+    print("\n=== 10. Registre modèles (Azure) ===")
+    from backend.llm.model_registry import resolve_chat_model
+
+    ok_all &= check(
+        "slug azure/Kimi-K2.6",
+        resolve_chat_model("kimi") == "azure/Kimi-K2.6"
+        or "azure/" in resolve_chat_model("azure/Kimi-K2.6"),
+    )
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

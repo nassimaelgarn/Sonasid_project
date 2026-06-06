@@ -175,9 +175,9 @@ def conversational_reply(
 
     sys = (
         domain
-        + "Réponds en **1 à 2 phrases courtes**, ton professionnel. Pas de listes.\n"
-        + "Ne termine pas systématiquement par une question.\n"
-        + "Ne réponds jamais par « Résultat: 1 ». N’exécute pas de SQL.\n"
+        + "Réponds en français avec clarté et intelligence métier (2 à 4 phrases ou 2–3 puces courtes si utile).\n"
+        + "Sois pertinent, nuancé et un peu créatif dans la formulation — sans jargon inutile ni listes longues.\n"
+        + "Ne termine pas systématiquement par une question. Ne réponds jamais par « Résultat: 1 ». N’exécute pas de SQL.\n"
     )
     prompt = f"{sys}\n\nQuestion:\n{q}\n\nContexte (RAG, optionnel):\n{rag or '(vide)'}\n"
 
@@ -204,7 +204,11 @@ def conversational_reply(
         if not mn:
             continue
         try:
-            text = (invoke_chat_text(prompt=prompt, model_name=mn) or "").strip()
+            text = (invoke_chat_text(
+                prompt=prompt,
+                model_name=mn,
+                temperature=float(os.getenv("SONASID_CHAT_TEMPERATURE", "0.35")),
+            ) or "").strip()
         except Exception as e:
             last_err = str(e) or repr(e)
             text = ""

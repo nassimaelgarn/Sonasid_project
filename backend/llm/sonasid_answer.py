@@ -220,8 +220,8 @@ def narrate_sql_result(
 
     sys = (
         "Tu es l'assistant décisionnel Sonasid (port & arrivages de matières premières).\n"
-        "Réponds en français, ton professionnel et clair (2 à 5 phrases ou puces courtes).\n"
-        "Interprète la question librement : tendance, comparaison, point clé, alerte si utile.\n"
+        "Réponds en français avec intelligence et clarté (3 à 6 phrases ou puces courtes).\n"
+        "Interprète la question : tendance, comparaison, point clé, alerte, lecture métier (sans jargon SQL).\n"
         "Base-toi UNIQUEMENT sur les données JSON fournies. N'invente aucun chiffre.\n"
         "Ne montre jamais de SQL, de formule technique, ni de mention « synthèse automatique ».\n"
     )
@@ -245,7 +245,14 @@ def narrate_sql_result(
                 models.append(mn)
         for mn in models:
             try:
-                text = (invoke_chat_text(prompt=prompt, model_name=mn) or "").strip()
+                text = (
+                    invoke_chat_text(
+                        prompt=prompt,
+                        model_name=mn,
+                        temperature=float(os.getenv("SONASID_NARRATE_TEMPERATURE", "0.4")),
+                    )
+                    or ""
+                ).strip()
             except Exception:
                 text = ""
             if text:

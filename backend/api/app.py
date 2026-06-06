@@ -418,6 +418,18 @@ app.add_middleware(
 )
 
 
+@app.get("/chat/models")
+def chat_models() -> Dict[str, Any]:
+    """Modèles disponibles dans le sélecteur UI (config .env)."""
+    from backend.llm.model_registry import chat_models_for_api, default_chat_model_id
+
+    return {
+        "ok": True,
+        "default": default_chat_model_id(),
+        "models": chat_models_for_api(),
+    }
+
+
 @app.get("/healthz")
 def healthz() -> Dict[str, Any]:
     """Santé API + indicateurs de déploiement (vérif. règles Sonasid actives)."""
