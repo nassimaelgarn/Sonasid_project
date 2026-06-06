@@ -137,6 +137,10 @@ def is_schema_metadata_question(text: str) -> bool:
         ql,
     ):
         return True
+    if re.search(r"\b(r[eé]sum[eé]|r[eé]cap|recap|inventaire|aper[cç]u|pr[eé]sentation)\b", ql) and has_table:
+        return True
+    if re.search(r"\b(toutes?|tout)\s+les?\s+tables?\b", ql):
+        return True
     if _wants_live_table_inventory(ql):
         return True
     return False
@@ -177,6 +181,12 @@ def _wants_live_table_inventory(ql: str) -> bool:
     ):
         return True
     if re.search(r"\b(liste|lister)\b", ql) and re.search(r"\btoutes?\s+les\s+tables?\b", ql):
+        return True
+    if re.search(r"\b(r[eé]sum[eé]|r[eé]cap|recap|inventaire|aper[cç]u)\b", ql) and re.search(
+        r"\btables?\b", ql
+    ):
+        return True
+    if re.search(r"\b(toutes?|tout)\s+les?\s+tables?\b", ql):
         return True
     return False
 
@@ -332,8 +342,11 @@ def build_table_inventory_message(question: str = "") -> str:
         if missing:
             lines.append(f"- _Non trouvées en base_ : {', '.join(missing)}")
         wants_list = bool(
-            re.search(r"\b(liste|lister|noms?|citer?|cite|affiche|montre|communiquer)\b", ql)
-            or re.search(r"\btoutes?\s+les\s+tables?\b", ql)
+            re.search(
+                r"\b(liste|lister|noms?|citer?|cite|affiche|montre|communiquer|r[eé]sum[eé]|r[eé]cap|recap|inventaire)\b",
+                ql,
+            )
+            or re.search(r"\b(toutes?|tout)\s+les?\s+tables?\b", ql)
         )
         if wants_list and names:
             lines.append("")

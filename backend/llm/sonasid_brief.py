@@ -183,6 +183,14 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
 
     ql = re.sub(r"\s+", " ", normalize_user_question(question or "").lower()).strip()
 
+    try:
+        from backend.llm.sonasid_schema import is_schema_metadata_question
+
+        if is_schema_metadata_question(ql):
+            return None
+    except Exception:
+        pass
+
     if _is_specific_kpi_question(ql):
         return None
 

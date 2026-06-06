@@ -157,6 +157,12 @@ def main() -> int:
         "diagramme inclut FLOTTE",
         "FLOTTE" in schema_metadata_reply(schema_q).get("message", ""),
     )
+    resume_tables_q = "resumé sur tout les tables de la base"
+    ok_all &= check(
+        "résumé tables → inventaire schéma",
+        is_schema_metadata_question(resume_tables_q)
+        and schema_metadata_reply(resume_tables_q).get("source") == "sonasid:schema",
+    )
     ok_all &= check(
         "structure NAVIRE par mois → schéma (pas KPI)",
         is_schema_metadata_question("structure de la table NAVIRE par mois")
