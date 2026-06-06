@@ -14,7 +14,7 @@ try:
 except ImportError:
     pass
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -1157,7 +1157,11 @@ def conversation_delete(session_id: str, request: Request) -> Dict[str, Any]:
 @app.post("/feedback")
 def post_feedback(payload: FeedbackRequest, request: Request) -> Dict[str, Any]:
     if payload.rating not in (-1, 1):
-        return {"ok": False, "error": "rating must be 1 or -1"}
+        raise HTTPException(status_code=400, detail="rating must be 1 or -1")
+    uq = (payload.user_question or "").strip()
+    ac = (payload.assistant_content or "").strip()
+    if not uq or not ac:
+        raise HTTPException(status_code=400, detail="user_question and assistant_content are required")
     try:
         meta: Dict[str, Any] = {}
         if payload.model_name:
@@ -1165,11 +1169,13 @@ def post_feedback(payload: FeedbackRequest, request: Request) -> Dict[str, Any]:
         row_id = add_chat_feedback(
             session_id=_scope_session_id(request, payload.session_id or "default"),
             rating=payload.rating,
-            user_question=payload.user_question,
-            assistant_content=payload.assistant_content,
+            user_question=uq,
+            assistant_content=ac,
             meta=meta,
         )
         return {"ok": True, "id": row_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e)) from e
 

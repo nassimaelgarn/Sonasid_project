@@ -2237,18 +2237,25 @@ export default function ChatWorkspace() {
 
   async function submitFeedback(messageIndex, rating, userQuestion, assistantContent) {
     if (feedbackVote[messageIndex] === rating) return
+    const uq = String(userQuestion || '').trim()
+    const ac = String(assistantContent || '').trim()
+    if (!uq || !ac) {
+      setFeedbackStatus((prev) => ({ ...prev, [messageIndex]: 'err' }))
+      return
+    }
     try {
       await apiPostFeedback(baseUrl, {
         session_id: sessionId,
         rating,
-        user_question: userQuestion,
-        assistant_content: assistantContent,
+        user_question: uq,
+        assistant_content: ac,
         model_name: modelName,
       })
       setFeedbackVote((prev) => ({ ...prev, [messageIndex]: rating }))
       setFeedbackStatus((prev) => ({ ...prev, [messageIndex]: 'ok' }))
-    } catch {
+    } catch (e) {
       setFeedbackStatus((prev) => ({ ...prev, [messageIndex]: 'err' }))
+      if (import.meta.env.DEV) console.warn('feedback failed', e)
     }
   }
 

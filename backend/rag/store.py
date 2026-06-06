@@ -13,6 +13,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 RAG_DB_PATH = os.path.join(BASE_DIR, "db", "rag.db")
 
 
+def _ensure_rag_db_dir() -> None:
+    db_dir = os.path.dirname(RAG_DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+
 @dataclass
 class RagHit:
     source: str
@@ -30,6 +36,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_rag_db() -> None:
+    _ensure_rag_db_dir()
     conn = _connect()
     cur = conn.cursor()
 
