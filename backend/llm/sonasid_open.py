@@ -51,6 +51,8 @@ def is_sonasid_llm_narrate() -> bool:
 
 def is_sonasid_kpi_rewrite_enabled() -> bool:
     """Reformulation LLM avant échec KPI — activée par défaut si Azure ou KPI_REWRITE_LLM."""
+    from backend.llm.kpi_rewrite import is_kpi_rewrite_enabled
+
     if is_sonasid_open_mode():
         v = (os.getenv("SONASID_KPI_REWRITE", "") or "").strip().lower()
         if v in {"0", "false", "no", "off"}:
@@ -60,8 +62,6 @@ def is_sonasid_kpi_rewrite_enabled() -> bool:
         if (os.getenv("AZURE_OPENAI_API_KEY") or "").strip():
             return True
         return is_kpi_rewrite_enabled()
-    from backend.llm.kpi_rewrite import is_kpi_rewrite_enabled
-
     return is_kpi_rewrite_enabled()
 
 
