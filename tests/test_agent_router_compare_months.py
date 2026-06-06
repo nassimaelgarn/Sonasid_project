@@ -25,8 +25,14 @@ def test_agent_router_compare_months_requires_year_when_missing():
         "model_name": "flash",
         "last_kpi_question": "",
     }
-    os.environ["DEFAULT_COMPARE_YEAR"] = "2025"
-    out = node_route(st)
-    assert out.get("intent") == "clarify"
-    assert "quelle année" in (out.get("clarify_message") or "").lower()
+    orig = os.environ.get("DEFAULT_COMPARE_YEAR")
+    if "DEFAULT_COMPARE_YEAR" in os.environ:
+        del os.environ["DEFAULT_COMPARE_YEAR"]
+    try:
+        out = node_route(st)
+        assert out.get("intent") == "clarify"
+        assert "quelle année" in (out.get("clarify_message") or "").lower()
+    finally:
+        if orig is not None:
+            os.environ["DEFAULT_COMPARE_YEAR"] = orig
 

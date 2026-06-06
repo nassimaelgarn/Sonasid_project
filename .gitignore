@@ -9,6 +9,8 @@ __pycache__/
 
 # Database
 db/*.db
+db/langgraph_checkpoints.sqlite
+db/langgraph_checkpoints.sqlite-*
 
 # Node / frontend
 node_modules/

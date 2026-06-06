@@ -644,7 +644,10 @@ def node_route(state: AgentState) -> AgentState:
                 # Default year when user omits it (configurable).
                 y = (os.getenv("DEFAULT_COMPARE_YEAR", "") or "").strip()
                 if not re.match(r"^20\d{2}$", y):
-                    y = str(datetime.now().year)
+                    return {
+                        "intent": "clarify",
+                        "clarify_message": "Tu veux comparer les mois de janvier et février de quelle année ?",
+                    }
             if m1 and m2:
                 year = int(y)
                 metric = _infer_metric_from_text(q) or q
