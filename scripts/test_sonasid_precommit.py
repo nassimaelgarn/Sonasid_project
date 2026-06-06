@@ -265,6 +265,12 @@ def main() -> int:
         "Aucun chiffre" in guide.get("message", "") or "Questions que je sais" in guide.get("message", ""),
     )
 
+    print("\n=== 8. STT (Whisper fallback) ===")
+    from backend.llm.stt import transcribe_audio_bytes
+
+    text, err = transcribe_audio_bytes(b"", fmt="webm")
+    ok_all &= check("audio vide rejeté", text is None and err is not None)
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

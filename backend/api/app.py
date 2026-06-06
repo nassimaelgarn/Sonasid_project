@@ -14,7 +14,7 @@ try:
 except ImportError:
     pass
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -984,6 +984,38 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
         return res
     _persist_assistant_memory(session_id=sid, res=res)
     return res
+
+
+@app.post("/chat/stt")
+async def chat_stt(audio: UploadFile = File(...)) -> Dict[str, Any]:
+    """Transcription audio (Whisper via OpenRouter) — fallback quand Web Speech API indisponible."""
+    from backend.llm.stt import transcribe_audio_bytes
+
+    raw = await audio.read()
+    fmt = ""
+    try:
+        fn = str(audio.filename or "")
+        if "." in fn:
+            fmt = fn.rsplit(".", 1)[-1].lower()
+    except Exception:
+        fmt = ""
+    if not fmt:
+        ct = str(audio.content_type or "").lower()
+        if "webm" in ct:
+            fmt = "webm"
+        elif "ogg" in ct:
+            fmt = "ogg"
+        elif "wav" in ct:
+            fmt = "wav"
+        elif "mp4" in ct or "m4a" in ct:
+            fmt = "m4a"
+        else:
+            fmt = "webm"
+
+    text, err = transcribe_audio_bytes(raw, fmt=fmt, language="fr")
+    if err:
+        return {"ok": False, "error": "STT_FAILED", "message": err}
+    return {"ok": True, "text": text}
 
 
 @app.post("/chat/retry")

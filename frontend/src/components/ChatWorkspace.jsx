@@ -1,6 +1,12 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { kpiApiBase } from '../lib/apiBase'
 import {
+  detectSttCapabilities,
+  pickRecorderMimeType,
+  primeMicrophoneAccess,
+  recorderFormatFromMime,
+} from '../lib/sttSupport'
+import {
   SONASID_CHAT_PLACEHOLDER,
   SONASID_CHAT_SUBTITLE,
   SONASID_TAGLINE,
@@ -1569,9 +1575,10 @@ export default function ChatWorkspace() {
   const [historyBusy, setHistoryBusy] = useState(false)
 
   const [chatInput, setChatInput] = useState('')
-  const [sttSupported, setSttSupported] = useState(false)
+  const [sttCaps, setSttCaps] = useState(() => detectSttCapabilities())
   const [sttListening, setSttListening] = useState(false)
   const [sttErr, setSttErr] = useState('')
+  const sttSupported = Boolean(sttCaps?.available)
   const [chat, setChat] = useState(() => [])
   const [busy, setBusy] = useState(false)
   const [grade] = useState('')
@@ -1632,6 +1639,11 @@ export default function ChatWorkspace() {
   const sttRef = useRef(null)
   const sttBaseRef = useRef('')
   const sttCooldownUntilRef = useRef(0)
+  const sttWantListeningRef = useRef(false)
+  const sttMediaStreamRef = useRef(null)
+  const sttMediaRecorderRef = useRef(null)
+  const sttMediaChunksRef = useRef([])
+  const sttRecorderMimeRef = useRef('')
   const modelPickerRef = useRef(null)
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
 
@@ -1717,22 +1729,60 @@ export default function ChatWorkspace() {
   }, [baseUrl])
 
   useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    setSttSupported(Boolean(SR))
+    setSttCaps(detectSttCapabilities())
     return () => {
+      sttWantListeningRef.current = false
       try {
         sttRef.current?.stop?.()
       } catch {
         /* noop */
       }
       sttRef.current = null
+      try {
+        sttMediaRecorderRef.current?.stop?.()
+      } catch {
+        /* noop */
+      }
+      sttMediaRecorderRef.current = null
+      try {
+        sttMediaStreamRef.current?.getTracks?.().forEach((t) => t.stop())
+      } catch {
+        /* noop */
+      }
+      sttMediaStreamRef.current = null
     }
   }, [])
 
+  function stopMediaStream() {
+    try {
+      sttMediaStreamRef.current?.getTracks?.().forEach((t) => {
+        try {
+          t.stop()
+        } catch {
+          /* noop */
+        }
+      })
+    } catch {
+      /* noop */
+    }
+    sttMediaStreamRef.current = null
+  }
+
+  function stopRecorderStt() {
+    try {
+      if (sttMediaRecorderRef.current?.state === 'recording') {
+        sttMediaRecorderRef.current.stop()
+      }
+    } catch {
+      /* noop */
+    }
+    sttMediaRecorderRef.current = null
+  }
+
   function stopStt() {
+    sttWantListeningRef.current = false
     sttCooldownUntilRef.current = Date.now() + 350
     try {
-      // `abort()` is more reliable than `stop()` when restarting quickly.
       sttRef.current?.abort?.()
     } catch {
       /* noop */
@@ -1743,43 +1793,151 @@ export default function ChatWorkspace() {
       /* noop */
     }
     sttRef.current = null
+    stopRecorderStt()
+    stopMediaStream()
     setSttListening(false)
   }
 
-  function startStt() {
+  async function transcribeRecordingBlob(blob) {
+    if (!blob || blob.size < 400) {
+      setSttErr('Aucune voix détectée.')
+      return
+    }
+    setSttErr('')
+    try {
+      const fd = new FormData()
+      const ext = recorderFormatFromMime(sttRecorderMimeRef.current)
+      fd.append('audio', blob, `recording.${ext}`)
+      const res = await fetch(`${baseUrl}/chat/stt`, {
+        method: 'POST',
+        body: fd,
+        credentials: 'include',
+      })
+      const text = await res.text()
+      let data = null
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch {
+        data = { raw: text }
+      }
+      if (!res.ok || data?.ok === false) {
+        const msg = data?.message || data?.error || `HTTP ${res.status}`
+        throw new Error(msg)
+      }
+      const spoken = String(data?.text || '').trim()
+      if (!spoken) {
+        setSttErr('Aucune voix détectée.')
+        return
+      }
+      const cur = String(sttBaseRef.current || chatInput || '').trim()
+      const next = (cur ? `${cur} ${spoken}` : spoken).replace(/\s+/g, ' ').trim()
+      sttBaseRef.current = next
+      setChatInput(next)
+    } catch (e) {
+      setSttErr(String(e?.message || 'Transcription indisponible.'))
+    }
+  }
+
+  async function startRecorderStt() {
+    const mime = pickRecorderMimeType()
+    if (!mime || typeof MediaRecorder === 'undefined') {
+      setSttErr('Enregistrement audio non supporté sur ce navigateur.')
+      return
+    }
+    sttBaseRef.current = String(chatInput || '')
+    sttMediaChunksRef.current = []
+    sttRecorderMimeRef.current = mime
+
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (e) {
+      const name = String(e?.name || '')
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setSttErr('Autorisation micro refusée.')
+      } else if (name === 'NotFoundError') {
+        setSttErr('Aucun micro détecté.')
+      } else {
+        setSttErr(name ? `Micro indisponible (${name}).` : 'Micro indisponible.')
+      }
+      return
+    }
+
+    sttMediaStreamRef.current = stream
+    const rec = new MediaRecorder(stream, { mimeType: mime })
+    sttMediaRecorderRef.current = rec
+
+    rec.ondataavailable = (ev) => {
+      if (ev?.data?.size) sttMediaChunksRef.current.push(ev.data)
+    }
+    rec.onerror = () => {
+      setSttErr('Erreur enregistrement audio.')
+      stopStt()
+    }
+    rec.onstop = async () => {
+      setSttListening(false)
+      stopMediaStream()
+      sttMediaRecorderRef.current = null
+      const blob = new Blob(sttMediaChunksRef.current, { type: mime })
+      sttMediaChunksRef.current = []
+      await transcribeRecordingBlob(blob)
+    }
+
+    try {
+      rec.start()
+      sttWantListeningRef.current = true
+      setSttListening(true)
+    } catch (e) {
+      setSttErr(String(e?.message || 'Impossible de démarrer le micro.'))
+      stopStt()
+    }
+  }
+
+  function startWebSpeechStt(caps) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) {
-      setSttErr('Speech-to-text non supporté sur ce navigateur.')
+      void startRecorderStt()
       return
     }
-    if (busy) return
-    // Avoid the "InvalidStateError" that often happens right after stop().
-    const cd = sttCooldownUntilRef.current || 0
-    if (Date.now() < cd) {
-      setTimeout(() => startStt(), Math.max(0, cd - Date.now()))
-      return
-    }
-    // If a previous instance still exists, hard-stop it first.
-    if (sttRef.current) stopStt()
-    setSttErr('')
 
     const rec = new SR()
     rec.lang = 'fr-FR'
-    rec.continuous = true
+    rec.continuous = !caps?.isSafari
     rec.interimResults = true
     sttBaseRef.current = String(chatInput || '')
 
     rec.onstart = () => setSttListening(true)
     rec.onerror = (e) => {
       const code = String(e?.error || '')
-      if (code === 'not-allowed' || code === 'service-not-allowed') setSttErr('Autorisation micro refusée.')
-      else if (code === 'no-speech') setSttErr('Aucune voix détectée.')
-      else setSttErr(code ? `Erreur micro: ${code}` : 'Erreur micro.')
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        setSttErr('Autorisation micro refusée.')
+        stopStt()
+        return
+      }
+      if (code === 'no-speech') {
+        setSttErr('Aucune voix détectée.')
+        stopStt()
+        return
+      }
+      if (code === 'network' || code === 'aborted') {
+        stopStt()
+        void startRecorderStt()
+        return
+      }
+      setSttErr(code ? `Erreur micro: ${code}` : 'Erreur micro.')
       stopStt()
     }
     rec.onend = () => {
       setSttListening(false)
       sttRef.current = null
+      if (caps?.isSafari && sttWantListeningRef.current) {
+        const cd = sttCooldownUntilRef.current || 0
+        const wait = Math.max(120, cd - Date.now())
+        setTimeout(() => {
+          if (!sttWantListeningRef.current || busy) return
+          startWebSpeechStt(caps)
+        }, wait)
+      }
     }
     rec.onresult = (ev) => {
       let interim = ''
@@ -1812,7 +1970,41 @@ export default function ChatWorkspace() {
       const msg = String(e?.name || e?.message || '')
       setSttErr(msg ? `Impossible de démarrer le micro (${msg}).` : 'Impossible de démarrer le micro.')
       stopStt()
+      void startRecorderStt()
     }
+  }
+
+  async function startStt() {
+    const caps = detectSttCapabilities()
+    setSttCaps(caps)
+    if (!caps.available) {
+      setSttErr(caps.message || 'Dictée vocale indisponible.')
+      return
+    }
+    if (busy) return
+
+    const cd = sttCooldownUntilRef.current || 0
+    if (Date.now() < cd) {
+      setTimeout(() => startStt(), Math.max(0, cd - Date.now()))
+      return
+    }
+    if (sttRef.current || sttMediaRecorderRef.current) stopStt()
+    setSttErr('')
+
+    const mic = await primeMicrophoneAccess()
+    if (!mic.ok) {
+      setSttErr(mic.message || 'Autorisation micro refusée.')
+      return
+    }
+
+    sttWantListeningRef.current = true
+    if (caps.preferWebSpeech) startWebSpeechStt(caps)
+    else await startRecorderStt()
+  }
+
+  function toggleStt() {
+    if (sttListening) stopStt()
+    else startStt()
   }
 
   useEffect(() => {
@@ -3506,21 +3698,29 @@ export default function ChatWorkspace() {
                       type="button"
                       className={clsx(
                         'flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors',
-                        sttSupported
-                          ? sttListening
-                            ? 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/25 dark:text-rose-200'
-                            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700/70'
-                          : 'opacity-40 text-slate-400 cursor-not-allowed',
+                        sttListening
+                          ? 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/25 dark:text-rose-200'
+                          : sttSupported
+                            ? 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700/70'
+                            : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700/70',
                       )}
                       onClick={() => {
-                        if (!sttSupported) return
-                        if (sttListening) stopStt()
-                        else startStt()
+                        if (!sttSupported) {
+                          setSttErr(sttCaps.message || 'Dictée vocale indisponible.')
+                          return
+                        }
+                        toggleStt()
                       }}
-                      disabled={!sttSupported || busy}
+                      disabled={busy}
                       aria-pressed={sttListening}
                       aria-label={sttListening ? 'Arrêter la dictée' : 'Dicter le message'}
-                      title={sttListening ? 'Arrêter la dictée' : 'Dicter (speech-to-text)'}
+                      title={
+                        sttListening
+                          ? 'Arrêter la dictée'
+                          : sttSupported
+                            ? 'Dicter (speech-to-text)'
+                            : sttCaps.message || 'Micro indisponible'
+                      }
                     >
                       <IconMic className={clsx('shrink-0', sttListening ? 'animate-pulse' : '')} />
                     </button>
