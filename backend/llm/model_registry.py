@@ -1,16 +1,14 @@
 """
-Registre des modèles chat Sonasid — OpenRouter, Azure OpenAI, Ollama.
+Registre des modèles chat Sonasid — Azure entreprise, OpenRouter, Ollama.
 
 Format SONASID_CHAT_MODELS (pipe-separated) :
   id:slug:Label:Hint
 
 Slugs :
-  - OpenRouter : openai/gpt-4o, openrouter/free, …
-  - Azure      : azure/Kimi-K2.6  (déploiement sur AZURE_OPENAI_ENDPOINT)
-  - Local      : ollama
-
-Exemple Azure :
-  kimi:azure/Kimi-K2.6:Kimi K2.6:Azure · entreprise|gpt4o:azure/Gpt-4o:GPT-4o:Azure
+  - Azure OpenAI v1  : azure/Kimi-K2.6
+  - Azure Inference  : azure-inference/grok-4.3
+  - OpenRouter       : openai/gpt-4o, openrouter/free, …
+  - Local            : ollama
 """
 from __future__ import annotations
 
@@ -31,8 +29,25 @@ class ChatModelSpec:
     hint: str
 
 
-def _azure_default_specs() -> List[ChatModelSpec]:
-    """3 déploiements Azure (même endpoint / clé) si configurés."""
+def _azure_inference_default_specs() -> List[ChatModelSpec]:
+    """Grok — endpoint /models (Azure AI Inference)."""
+    from backend.llm.azure_inference_chat import azure_inference_configured
+
+    if not azure_inference_configured():
+        return []
+
+    dep = (
+        (os.getenv("AZURE_INFERENCE_DEPLOYMENT") or os.getenv("AZURE_INFERENCE_DEPLOYMENT_1") or "grok-4.3")
+        .strip()
+    )
+    lbl = (os.getenv("AZURE_INFERENCE_LABEL") or os.getenv("AZURE_INFERENCE_LABEL_1") or "Grok 4.3").strip()
+    if dep:
+        return [ChatModelSpec("grok", f"azure-inference/{dep}", lbl, "Azure · entreprise")]
+    return []
+
+
+def _azure_openai_default_specs() -> List[ChatModelSpec]:
+    """Kimi + DeepSeek — endpoint /openai/v1."""
     from backend.llm.azure_openai_chat import azure_openai_configured
 
     if not azure_openai_configured():
@@ -41,13 +56,12 @@ def _azure_default_specs() -> List[ChatModelSpec]:
     specs: List[ChatModelSpec] = []
     defaults = [
         ("kimi", "Kimi-K2.6", "Kimi K2.6", "Azure · recommandé"),
-        ("azure2", "", "Modèle entreprise 2", "Azure · entreprise"),
-        ("azure3", "", "Modèle entreprise 3", "Azure · entreprise"),
+        ("deepseek", "DeepSeek-V4-Pro", "DeepSeek V4 Pro", "Azure · analyse"),
     ]
     for i, (mid, default_dep, label, hint) in enumerate(defaults, start=1):
         dep = (
             (os.getenv(f"AZURE_OPENAI_DEPLOYMENT_{i}") or "").strip()
-            or (default_dep if i == 1 else "").strip()
+            or default_dep.strip()
         )
         lbl = (os.getenv(f"AZURE_OPENAI_LABEL_{i}") or label).strip()
         if dep:
@@ -56,7 +70,6 @@ def _azure_default_specs() -> List[ChatModelSpec]:
 
 
 def _openrouter_default_specs() -> List[ChatModelSpec]:
-    """Modèles OpenRouter existants (Trinity, Flash) — conservés tels quels."""
     fb = _fallback_slug()
     return [
         ChatModelSpec(
@@ -75,9 +88,10 @@ def _openrouter_default_specs() -> List[ChatModelSpec]:
 
 
 def _default_specs() -> List[ChatModelSpec]:
-    # Ordre UI : 3 Azure entreprise (prioritaires) → OpenRouter → Ollama local
+    # Ordre UI : 3 Azure entreprise → OpenRouter → Ollama
     out: List[ChatModelSpec] = []
-    out.extend(_azure_default_specs())
+    out.extend(_azure_inference_default_specs())
+    out.extend(_azure_openai_default_specs())
     if (os.getenv("OPENROUTER_API_KEY") or "").strip():
         seen = {s.id for s in out}
         for spec in _openrouter_default_specs():
@@ -128,7 +142,7 @@ def default_chat_model_id() -> str:
     d = (os.getenv("SONASID_DEFAULT_CHAT_MODEL", "") or "").strip().lower()
     if d and d in chat_model_map():
         return d
-    for preferred in ("kimi", "azure2", "azure3", "trinity", "flash"):
+    for preferred in ("kimi", "grok", "deepseek", "trinity", "flash"):
         if preferred in chat_model_map():
             return preferred
     specs = list_chat_models()

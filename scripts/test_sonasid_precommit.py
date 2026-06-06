@@ -288,13 +288,23 @@ def main() -> int:
     ok_all &= check("1 mois sans flèche redondante", "janvier 2026" in one and "→" not in one)
 
     print("\n=== 10. Registre modèles (Azure) ===")
-    from backend.llm.model_registry import resolve_chat_model
+    import os
 
+    from backend.llm.model_registry import list_chat_models, resolve_chat_model
+
+    os.environ["AZURE_OPENAI_API_KEY"] = "test-key"
+    os.environ["AZURE_OPENAI_ENDPOINT"] = "https://x.services.ai.azure.com/openai/v1"
+    os.environ["AZURE_INFERENCE_ENDPOINT"] = "https://x.services.ai.azure.com/models"
+    os.environ["OPENROUTER_API_KEY"] = "or-key"
+    ids = [m.id for m in list_chat_models()]
     ok_all &= check(
-        "slug azure/Kimi-K2.6",
-        resolve_chat_model("kimi") == "azure/Kimi-K2.6"
-        or "azure/" in resolve_chat_model("azure/Kimi-K2.6"),
+        "3 Azure + OpenRouter + Ollama",
+        ids == ["grok", "kimi", "deepseek", "trinity", "flash", "ollama"],
+        ids,
     )
+    ok_all &= check("slug kimi", resolve_chat_model("kimi") == "azure/Kimi-K2.6")
+    ok_all &= check("slug grok", resolve_chat_model("grok") == "azure-inference/grok-4.3")
+    ok_all &= check("slug deepseek", resolve_chat_model("deepseek") == "azure/DeepSeek-V4-Pro")
 
     print("\n=== Résultat ===")
     if ok_all:

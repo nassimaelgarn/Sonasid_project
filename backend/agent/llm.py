@@ -4,6 +4,11 @@ from typing import Any, Optional
 from langchain_openai import ChatOpenAI
 import requests
 
+from backend.llm.azure_inference_chat import (
+    azure_inference_model_from_slug,
+    invoke_azure_inference_chat,
+    is_azure_inference_model_slug,
+)
 from backend.llm.azure_openai_chat import (
     azure_deployment_from_slug,
     invoke_azure_chat,
@@ -43,7 +48,7 @@ def _is_ollama(model_name: str) -> bool:
     if resolve_model_name(model_name) == "ollama":
         return True
     slug = resolve_model_name(model_name)
-    if is_azure_model_slug(slug):
+    if is_azure_model_slug(slug) or is_azure_inference_model_slug(slug):
         return False
     if ":" in n and not n.startswith("http"):
         return True
@@ -101,7 +106,7 @@ def invoke_chat_text(*, prompt: str, model_name: str = "", temperature: Optional
     primary = resolve_model_name(model_name) or os.getenv("OPENROUTER_MODEL", OPENROUTER_CHAT_FALLBACK).strip()
     chain = [primary]
     fb = OPENROUTER_CHAT_FALLBACK
-    if fb and fb not in chain and not is_azure_model_slug(primary):
+    if fb and fb not in chain and not is_azure_model_slug(primary) and not is_azure_inference_model_slug(primary):
         chain.append(fb)
 
     last_err: Optional[Exception] = None
@@ -111,7 +116,13 @@ def invoke_chat_text(*, prompt: str, model_name: str = "", temperature: Optional
             continue
         tried.append(slug)
         try:
-            if is_azure_model_slug(slug):
+            if is_azure_inference_model_slug(slug):
+                text = invoke_azure_inference_chat(
+                    prompt=prompt,
+                    model=azure_inference_model_from_slug(slug),
+                    temperature=temperature,
+                )
+            elif is_azure_model_slug(slug):
                 text = invoke_azure_chat(
                     prompt=prompt,
                     deployment=azure_deployment_from_slug(slug),
@@ -126,7 +137,7 @@ def invoke_chat_text(*, prompt: str, model_name: str = "", temperature: Optional
         except Exception as e:
             last_err = e
             msg = str(e).lower()
-            if is_azure_model_slug(slug):
+            if is_azure_model_slug(slug) or is_azure_inference_model_slug(slug):
                 continue
             if "404" not in msg and "no endpoints found" not in msg and "not found" not in msg:
                 raise
