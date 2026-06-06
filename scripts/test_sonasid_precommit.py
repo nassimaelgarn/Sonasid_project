@@ -190,6 +190,7 @@ def main() -> int:
         ("dis-moi ce qui s'est passé côté arrivages l'an dernier", "arrivages_analysis"),
         ("comment ça se présente niveau marchandises importées récemment", "dashboard"),
         ("c'est quoi la situation au port cette année", "dashboard"),
+        ("parle moi de tous les arrivages de 2026", "arrivages_analysis"),
     ]
     for q, expected_kind in vague_cases:
         hint = detect_sonasid_brief(q)

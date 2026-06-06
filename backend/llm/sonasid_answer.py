@@ -309,9 +309,9 @@ def llm_enrich_brief_message(
 
     sys = (
         "Tu es analyste décisionnel Sonasid (port & arrivages de matières premières).\n"
-        "À partir des chiffres FACTUELS ci-dessous, rédige une synthèse intelligente en français "
-        "(4 à 8 phrases ou puces courtes) : lecture métier, tendances, comparaisons, points d'attention.\n"
-        "N'invente AUCUN chiffre — reprends uniquement ceux fournis. Ton professionnel, nuancé et clair.\n"
+        "À partir des chiffres FACTUELS ci-dessous, rédige une courte **lecture métier** en français "
+        "(3 à 6 phrases ou puces) : tendances, comparaisons, points d'attention.\n"
+        "N'invente AUCUN chiffre — reprends uniquement ceux fournis. Ne recopie pas tout le tableau.\n"
     )
     prompt = f"{sys}\n\nQuestion utilisateur :\n{question.strip()}\n\nDonnées factuelles :\n{base}\n"
 
@@ -349,7 +349,7 @@ def llm_enrich_brief_message(
     if not text:
         return out
     enriched = dict(out)
-    enriched["message"] = text
+    enriched["message"] = f"{base}\n\n---\n\n**Lecture métier**\n\n{text}"
     enriched["brief_llm_enriched"] = True
     return enriched
 

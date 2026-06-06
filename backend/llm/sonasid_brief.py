@@ -125,6 +125,19 @@ def _is_specific_kpi_question(ql: str) -> bool:
     return False
 
 
+def _is_all_arrivages_overview(ql: str) -> bool:
+    """« Parle moi de tous les arrivages en 2026 » → brief multi-axes complet."""
+    if not re.search(r"\barrivages?\b", ql):
+        return False
+    if re.search(r"\btous(\s+les)?\s+arrivages?\b", ql):
+        return True
+    if re.search(r"\b(tous|ensemble|global|complet|complète|intégral|integral)\b", ql) and re.search(
+        r"\b(parle|dis|raconte|explique|fais|donne|donner|parle moi|dis moi)\b", ql
+    ):
+        return True
+    return False
+
+
 def _is_vague_port_overview(ql: str) -> bool:
     """Question ouverte port / arrivages sans KPI explicite (pas une requête technique)."""
     if re.search(r"\b(formule|requete|requête|sql|query)\b", ql):
@@ -195,12 +208,19 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
         return None
 
     if _is_vague_port_overview(ql):
-        if re.search(r"\b(analyse|analyser|axes|multi|d[eéè]taill)\b", ql) or (
-            re.search(r"\barrivages?\b", ql)
-            and re.search(r"\b(passé|passe|c[oô]t[eé]|historique|l'an dernier|année dernière)\b", ql)
+        if (
+            _is_all_arrivages_overview(ql)
+            or re.search(r"\b(analyse|analyser|axes|multi|d[eéè]taill)\b", ql)
+            or (
+                re.search(r"\barrivages?\b", ql)
+                and re.search(r"\b(passé|passe|c[oô]t[eé]|historique|l'an dernier|année dernière)\b", ql)
+            )
         ):
             return {"kind": "arrivages_analysis"}
         return {"kind": "dashboard"}
+
+    if _is_all_arrivages_overview(ql):
+        return {"kind": "arrivages_analysis"}
 
     if re.search(r"\b(kpi|kip|indicateurs?)\b", ql) and re.search(
         r"\b(résumé|resume|recap|récap|synthèse|synthese|tableau de bord|donne|donne-moi|tous|ensemble|global|principaux?|l'ensemble)\b",
@@ -356,20 +376,34 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
 
 
 def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
-    lines: List[str] = [
-        f"**Analyse arrivages & navires — {', '.join(str(y) for y in years)}**",
-        "",
-        "Vue multi-axes : globale, mensuelle, par qualité, par fournisseur, tonnage.",
-        "",
-    ]
+    ql = re.sub(r"\s+", " ", normalize_kpi_question(question or "").lower()).strip()
+    overview = _is_all_arrivages_overview(ql)
+    period_label = ", ".join(str(y) for y in years)
+    if overview:
+        lines: List[str] = [
+            f"**Vue complète des arrivages — {period_label}**",
+            "",
+            "Synthèse port & arrivages : totaux, évolution mensuelle, qualités, fournisseurs et navires.",
+            "",
+        ]
+    else:
+        lines = [
+            f"**Analyse arrivages & navires — {period_label}**",
+            "",
+            "Vue multi-axes : globale, mensuelle, par qualité, par fournisseur, tonnage.",
+            "",
+        ]
     all_rows: List[Dict[str, Any]] = []
     series_monthly: List[Dict[str, Any]] = []
+    fournisseurs_table: List[Dict[str, Any]] = []
+    top_n = 50 if overview else 10
 
     for year in years:
         df = "Arrivage_DateCreation"
         w_year = _year_clause(f"a.{df}", year)
         w_arr = f"WHERE a.{_active_arrivage(w_year)}"
 
+        nav_actifs, _ = _scalar(f"SELECT COUNT(*) FROM {T_NAVIRE} WHERE Navire_Active = 1")
         n_arr, err = _scalar(f"SELECT COUNT(*) FROM {T_ARRIVAGE} a {w_arr}")
         ton, _ = _scalar(
             f"SELECT SUM(a.Arrivage_TonnageTotal) FROM {T_ARRIVAGE} a {w_arr}"
@@ -379,6 +413,13 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
             f"FROM {T_ARRIVAGE} a "
             f"INNER JOIN {T_NOMINATION} nn ON a.Arrivage_Id = nn.NominationNavire_ArrivageId "
             f"{w_arr}"
+        )
+        ton_trans, _ = _scalar(
+            f"SELECT SUM(t.Transfert_PoidsNet) "
+            f"FROM {T_TRANSFERT} t "
+            f"INNER JOIN {T_COMMANDE} c ON t.Transfert_CommandeId = c.Commande_Id "
+            f"INNER JOIN {T_ARRIVAGE} a ON c.Commande_ArrivageId = a.Arrivage_Id "
+            f"{w_arr} AND t.Transfert_Actif = 1"
         )
 
         lines.append(f"### {year} — vue globale")
@@ -396,11 +437,23 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
             }
         lines.extend(
             [
-                f"- **Arrivages** : {_fmt_num(n_arr or 0)}",
+                f"- **Arrivages (total)** : {_fmt_num(n_arr or 0)}",
                 f"- **Tonnage importé** : {_fmt_num(ton or 0)} t",
-                f"- **Navires distincts** : {_fmt_num(nav_dist or 0)}",
+                f"- **Navires actifs (référentiel)** : {_fmt_num(nav_actifs or 0)}",
+                f"- **Navires distincts ayant accosté** : {_fmt_num(nav_dist or 0)}",
+                f"- **Tonnage transféré** : {_fmt_num(ton_trans or 0)} t",
                 "",
             ]
+        )
+        all_rows.append(
+            {
+                "annee": year,
+                "arrivages": n_arr or 0,
+                "tonnage_importe": ton or 0,
+                "navires_actifs": nav_actifs or 0,
+                "navires_distincts": nav_dist or 0,
+                "tonnage_transfere": ton_trans or 0,
+            }
         )
 
         mo_sql = (
@@ -427,6 +480,8 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
                 all_rows.append(
                     {"annee": year, "mois": mo, "arrivages": n, "tonnage": t or 0}
                 )
+                if overview:
+                    lines.append(f"- {mo} : {_fmt_num(n)} arrivages · {_fmt_num(t or 0)} t")
             lines.append("")
 
         qual_sql = (
@@ -454,24 +509,61 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
             lines.append("")
 
         fourn_sql = (
-            f"SELECT TOP 10 f.Fournisseur_Nom, COUNT(DISTINCT a.Arrivage_Id) AS n, "
+            f"SELECT TOP {top_n} f.Fournisseur_Nom, COUNT(DISTINCT a.Arrivage_Id) AS n, "
             f"SUM(a.Arrivage_TonnageTotal) AS tonnage "
             f"FROM {T_ARRIVAGE} a "
             f"INNER JOIN {T_FOURNISSEUR} f ON a.Arrivage_FournisseurId = f.Fournisseur_Id "
             f"{w_arr} "
-            f"GROUP BY f.Fournisseur_Nom ORDER BY tonnage DESC"
+            f"GROUP BY f.Fournisseur_Nom ORDER BY n DESC, tonnage DESC"
         )
         fourn_rows, _ = _rows(fourn_sql)
         if fourn_rows:
-            lines.append(f"**Top fournisseurs ({year})**")
-            for nom, n, t in fourn_rows[:5]:
+            label = f"Fournisseurs ({year})" if overview else f"Top fournisseurs ({year})"
+            lines.append(f"**{label}**")
+            show_fourn = fourn_rows if overview else fourn_rows[:5]
+            for nom, n, t in show_fourn:
+                lines.append(f"- {nom} : {_fmt_num(n)} arrivages · {_fmt_num(t or 0)} t")
+                row = {
+                    "annee": year,
+                    "fournisseur": nom,
+                    "nombre_arrivages": n,
+                    "tonnage_total": t or 0,
+                    "arrivages": n,
+                    "tonnage": t or 0,
+                }
+                all_rows.append(row)
+                if overview:
+                    fournisseurs_table.append(
+                        {
+                            "fournisseur": nom,
+                            "nombre_arrivages": n,
+                            "tonnage_total": t or 0,
+                        }
+                    )
+            lines.append("")
+
+        nav_sql = (
+            f"SELECT TOP {top_n} nv.Navire_Nom, COUNT(DISTINCT a.Arrivage_Id) AS n, "
+            f"SUM(a.Arrivage_TonnageTotal) AS tonnage "
+            f"FROM {T_ARRIVAGE} a "
+            f"INNER JOIN {T_NOMINATION} nn ON a.Arrivage_Id = nn.NominationNavire_ArrivageId "
+            f"INNER JOIN {T_NAVIRE} nv ON nn.NominationNavire_NavireId = nv.Navire_Id "
+            f"{w_arr} "
+            f"GROUP BY nv.Navire_Nom ORDER BY n DESC, tonnage DESC"
+        )
+        nav_rows, _ = _rows(nav_sql)
+        if nav_rows:
+            label = f"Navires ({year})" if overview else f"Top navires ({year})"
+            lines.append(f"**{label}**")
+            show_nav = nav_rows if overview else nav_rows[:5]
+            for nom, n, t in show_nav:
                 lines.append(f"- {nom} : {_fmt_num(n)} arrivages · {_fmt_num(t or 0)} t")
                 all_rows.append(
                     {
                         "annee": year,
-                        "fournisseur": nom,
-                        "arrivages": n,
-                        "tonnage": t or 0,
+                        "navire": nom,
+                        "nombre_arrivages": n,
+                        "tonnage_total": t or 0,
                     }
                 )
             lines.append("")
@@ -481,10 +573,23 @@ def _run_arrivages_analysis(question: str, years: List[int]) -> Dict[str, Any]:
         "source": "sonasid:brief",
         "brief_kind": "arrivages_analysis",
         "years": years,
-        "result": series_monthly if series_monthly else all_rows,
         "sections": all_rows,
         "message": "\n".join(lines).strip(),
     }
-    if series_monthly:
+    if overview and fournisseurs_table:
+        out["result"] = fournisseurs_table
+        out["fournisseurs_table"] = fournisseurs_table
+        if series_monthly:
+            out["series_monthly"] = series_monthly
+            out["nombre_arrivages"] = sum(float(r.get("value") or 0) for r in series_monthly)
+    elif series_monthly:
+        out["result"] = series_monthly
         out["nombre_arrivages"] = sum(float(r.get("value") or 0) for r in series_monthly)
+    else:
+        out["result"] = all_rows
+    if not out.get("nombre_arrivages") and overview:
+        for row in all_rows:
+            if isinstance(row, dict) and row.get("arrivages") and row.get("annee") and not row.get("mois"):
+                out["nombre_arrivages"] = row.get("arrivages")
+                break
     return out
