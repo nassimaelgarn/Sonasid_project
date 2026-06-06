@@ -40,9 +40,9 @@ def _azure_default_specs() -> List[ChatModelSpec]:
 
     specs: List[ChatModelSpec] = []
     defaults = [
-        ("kimi", "Kimi-K2.6", "Kimi K2.6", "Azure · Kimi"),
-        ("azure2", "", "Modèle Azure 2", "Azure · entreprise"),
-        ("azure3", "", "Modèle Azure 3", "Azure · entreprise"),
+        ("kimi", "Kimi-K2.6", "Kimi K2.6", "Azure · recommandé"),
+        ("azure2", "", "Modèle entreprise 2", "Azure · entreprise"),
+        ("azure3", "", "Modèle entreprise 3", "Azure · entreprise"),
     ]
     for i, (mid, default_dep, label, hint) in enumerate(defaults, start=1):
         dep = (
@@ -56,28 +56,36 @@ def _azure_default_specs() -> List[ChatModelSpec]:
 
 
 def _openrouter_default_specs() -> List[ChatModelSpec]:
+    """Modèles OpenRouter existants (Trinity, Flash) — conservés tels quels."""
     fb = _fallback_slug()
     return [
-        ChatModelSpec("gpt4o", os.getenv("OPENROUTER_MODEL_GPT4O", "openai/gpt-4o").strip(), "GPT-4o", "OpenRouter"),
-        ChatModelSpec("gpt41", os.getenv("OPENROUTER_MODEL_GPT41", "openai/gpt-4.1").strip(), "GPT-4.1", "OpenRouter"),
-        ChatModelSpec("o3mini", os.getenv("OPENROUTER_MODEL_O3MINI", "openai/o3-mini").strip(), "O3 mini", "OpenRouter"),
-        ChatModelSpec("flash", os.getenv("OPENROUTER_MODEL_FLASH", fb).strip() or fb, "Flash", "OpenRouter · rapide"),
-        ChatModelSpec("trinity", fb, "Trinity", "Legacy"),
+        ChatModelSpec(
+            "trinity",
+            (os.getenv("OPENROUTER_MODEL_TRINITY") or fb).strip() or fb,
+            "Trinity",
+            "OpenRouter · cloud",
+        ),
+        ChatModelSpec(
+            "flash",
+            (os.getenv("OPENROUTER_MODEL_FLASH") or fb).strip() or fb,
+            "Flash",
+            "OpenRouter · rapide",
+        ),
     ]
 
 
 def _default_specs() -> List[ChatModelSpec]:
-    azure = _azure_default_specs()
-    if azure:
-        out = list(azure)
-        fb = _fallback_slug()
-        if (os.getenv("OPENROUTER_API_KEY") or "").strip():
-            out.append(ChatModelSpec("flash", fb, "Flash", "OpenRouter · secours"))
-        out.append(ChatModelSpec("ollama", "ollama", "Llama3.1", "Local · Ollama"))
-        return out
-    specs = _openrouter_default_specs()
-    specs.append(ChatModelSpec("ollama", "ollama", "Llama3.1", "Local · Ollama"))
-    return specs
+    # Ordre UI : 3 Azure entreprise (prioritaires) → OpenRouter → Ollama local
+    out: List[ChatModelSpec] = []
+    out.extend(_azure_default_specs())
+    if (os.getenv("OPENROUTER_API_KEY") or "").strip():
+        seen = {s.id for s in out}
+        for spec in _openrouter_default_specs():
+            if spec.id not in seen:
+                out.append(spec)
+                seen.add(spec.id)
+    out.append(ChatModelSpec("ollama", "ollama", "Llama3.1", "Local · Ollama"))
+    return out
 
 
 def _parse_env_models(raw: str) -> List[ChatModelSpec]:
@@ -120,7 +128,7 @@ def default_chat_model_id() -> str:
     d = (os.getenv("SONASID_DEFAULT_CHAT_MODEL", "") or "").strip().lower()
     if d and d in chat_model_map():
         return d
-    for preferred in ("kimi", "gpt4o", "gpt41", "flash"):
+    for preferred in ("kimi", "azure2", "azure3", "trinity", "flash"):
         if preferred in chat_model_map():
             return preferred
     specs = list_chat_models()
