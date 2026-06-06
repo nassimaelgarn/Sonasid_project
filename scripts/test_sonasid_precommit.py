@@ -158,8 +158,9 @@ def main() -> int:
         "FLOTTE" in schema_metadata_reply(schema_q).get("message", ""),
     )
     ok_all &= check(
-        "structure NAVIRE → pas KPI pipeline",
-        not should_use_kpi_pipeline("structure de la table NAVIRE"),
+        "structure NAVIRE par mois → schéma (pas KPI)",
+        is_schema_metadata_question("structure de la table NAVIRE par mois")
+        and not should_use_kpi_pipeline("structure de la table NAVIRE par mois"),
     )
     ok_all &= check(
         "champs QUALITE → fiche dictionnaire",

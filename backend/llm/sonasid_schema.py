@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 
 def _project_root() -> Path:
@@ -141,6 +142,33 @@ def is_schema_metadata_question(text: str) -> bool:
     return False
 
 
+def _schema_live_timeout_s() -> float:
+    try:
+        return float(os.getenv("AZURE_SQL_SCHEMA_TIMEOUT", "8") or "8")
+    except (TypeError, ValueError):
+        return 8.0
+
+
+T = TypeVar("T")
+
+
+def _azure_call_timed(fn: Callable[[], T], *, timeout_s: Optional[float] = None) -> tuple[T | None, str | None]:
+    """Exécute un appel Azure avec timeout — évite de bloquer /chat (Load failed)."""
+    lim = timeout_s if timeout_s is not None else _schema_live_timeout_s()
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(fn)
+            return fut.result(timeout=max(2.0, lim)), None
+    except FuturesTimeout:
+        return None, f"délai dépassé ({lim:.0f}s)"
+    except Exception as e:
+        return None, str(e) or repr(e)
+
+
+def _schema_introspection_timeout_s() -> int:
+    return max(3, int(_schema_live_timeout_s()))
+
+
 def _wants_live_table_inventory(ql: str) -> bool:
     if re.search(r"\b(nombre|combien|count|total)\b", ql) and re.search(r"\btables?\b", ql):
         return True
@@ -190,7 +218,12 @@ def _query_live_columns(table: str) -> tuple[list[dict[str, Any]] | None, str | 
 
         if not is_azure_provider():
             return None, "base locale"
-        return list_columns(table=table, schema="dbo"), None
+        tmo = _schema_introspection_timeout_s()
+
+        def _run():
+            return list_columns(table=table, schema="dbo", connection_timeout_s=tmo)
+
+        return _azure_call_timed(_run)
     except Exception as e:
         return None, str(e) or repr(e)
 
@@ -201,7 +234,12 @@ def _query_live_foreign_keys(table: str = "") -> tuple[list[dict[str, str]] | No
 
         if not is_azure_provider():
             return None, "base locale"
-        return list_foreign_keys(table=table, schema="dbo"), None
+        tmo = _schema_introspection_timeout_s()
+
+        def _run():
+            return list_foreign_keys(table=table, schema="dbo", connection_timeout_s=tmo)
+
+        return _azure_call_timed(_run)
     except Exception as e:
         return None, str(e) or repr(e)
 
@@ -259,6 +297,16 @@ def build_live_table_structure_message(table: str, question: str = "") -> str:
 
     if not doc and cols is None:
         return build_schema_overview_message(question, _from_live_fallback=True)
+
+    ql = (question or "").lower()
+    if re.search(r"\b(par mois|mensuel)\b", ql) and re.search(
+        r"\b(structure|champs|colonnes|table)\b", ql
+    ):
+        lines.append("")
+        lines.append(
+            "_Note : la structure d’une table ne varie pas « par mois ». "
+            "Pour une série mensuelle (ex. navires actifs par mois), demandez un **KPI** avec période._"
+        )
 
     return "\n".join(lines)
 
@@ -391,13 +439,20 @@ def build_schema_overview_message(question: str = "", *, _from_live_fallback: bo
 
 
 def schema_metadata_reply(question: str) -> Dict[str, Any]:
-    ql = (question or "").lower()
-    if _wants_live_table_inventory(ql):
-        message = build_table_inventory_message(question)
-    else:
-        message = build_schema_overview_message(question)
+    q = (question or "").strip()
+    try:
+        ql = q.lower()
+        if _wants_live_table_inventory(ql):
+            message = build_table_inventory_message(q)
+        else:
+            message = build_schema_overview_message(q)
+    except Exception as e:
+        message = (
+            f"Impossible de charger le schéma pour l’instant ({str(e) or repr(e)}).\n\n"
+            "Réessayez ou consultez `docs/dictionnaire_sonasid.md` sur le serveur."
+        )
     return {
-        "question": (question or "").strip(),
+        "question": q,
         "message": message,
         "source": "sonasid:schema",
     }

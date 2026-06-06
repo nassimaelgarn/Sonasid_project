@@ -31,7 +31,7 @@ def azure_config() -> Dict[str, str]:
     }
 
 
-def azure_connect():
+def azure_connect(*, connection_timeout_s: Optional[int] = None):
     if pyodbc is None:
         raise RuntimeError("pyodbc non installé (pip install -r requirements.txt)")
     cfg = azure_config()
@@ -44,6 +44,8 @@ def azure_connect():
             "Variables Azure SQL manquantes (AZURE_SQL_SERVER, AZURE_SQL_DB, AZURE_SQL_USER, AZURE_SQL_PASSWORD)"
         )
     driver = cfg["driver"]
+    if connection_timeout_s is None:
+        connection_timeout_s = int(os.getenv("AZURE_SQL_CONNECTION_TIMEOUT", "30") or "30")
     conn_str = (
         f"Driver={{{driver}}};"
         f"Server=tcp:{server},1433;"
@@ -52,7 +54,7 @@ def azure_connect():
         f"Pwd={pwd};"
         "Encrypt=yes;"
         "TrustServerCertificate=no;"
-        "Connection Timeout=30;"
+        f"Connection Timeout={max(3, int(connection_timeout_s))};"
     )
     return pyodbc.connect(conn_str)
 
@@ -105,7 +107,7 @@ def list_tables(schema: str = "dbo", limit: int = 500) -> List[Dict[str, str]]:
     ]
 
 
-def list_columns(table: str, schema: str = "dbo") -> List[Dict[str, Any]]:
+def list_columns(table: str, schema: str = "dbo", *, connection_timeout_s: Optional[int] = None) -> List[Dict[str, Any]]:
     t = (table or "").strip()
     if not t:
         raise ValueError("table requis")
@@ -117,7 +119,7 @@ def list_columns(table: str, schema: str = "dbo") -> List[Dict[str, Any]]:
         "ORDER BY ORDINAL_POSITION"
     )
     obj = f"{schema}.{t}"
-    with azure_connect() as conn:
+    with azure_connect(connection_timeout_s=connection_timeout_s) as conn:
         cur = conn.cursor()
         cur.execute(sql, (obj, schema, t))
         rows = cur.fetchall()
@@ -132,7 +134,9 @@ def list_columns(table: str, schema: str = "dbo") -> List[Dict[str, Any]]:
     ]
 
 
-def list_foreign_keys(table: str = "", schema: str = "dbo") -> List[Dict[str, str]]:
+def list_foreign_keys(
+    table: str = "", schema: str = "dbo", *, connection_timeout_s: Optional[int] = None
+) -> List[Dict[str, str]]:
     """Clés étrangères dbo — filtre optionnel par table (parent ou référencée)."""
     s = (schema or "dbo").strip()
     t = (table or "").strip()
@@ -157,7 +161,7 @@ def list_foreign_keys(table: str = "", schema: str = "dbo") -> List[Dict[str, st
         sql += "AND (tp.name = ? OR tr.name = ?) "
         params.extend([t, t])
     sql += "ORDER BY tp.name, cp.name"
-    with azure_connect() as conn:
+    with azure_connect(connection_timeout_s=connection_timeout_s) as conn:
         cur = conn.cursor()
         cur.execute(sql, params)
         rows = cur.fetchall()

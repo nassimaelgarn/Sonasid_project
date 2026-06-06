@@ -847,6 +847,27 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
         prior: List[Dict[str, Any]] = get_conversation_history(session_id=sid, limit=80)
     except Exception:
         prior = []
+
+    # Schéma / structure table : réponse immédiate (dictionnaire + Azure), sans KPI ni LLM.
+    try:
+        from backend.llm.llm_sql import normalize_user_question
+        from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
+
+        q_schema = normalize_user_question(q_raw)
+        if is_schema_metadata_question(q_schema):
+            try:
+                add_memory(session_id=sid, role="user", content=q_raw)
+            except Exception:
+                pass
+            res = schema_metadata_reply(q_schema)
+            try:
+                add_memory(session_id=sid, role="assistant", content=_assistant_memory_content(res))
+            except Exception:
+                pass
+            return res
+    except Exception:
+        pass
+
     q_eff = merge_need_period_followup_from_history(q_raw, prior)
     q_eff = merge_kpi_followup_from_history(q_eff, prior)
     notice_ui = None
@@ -897,16 +918,18 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
         allowed_years_tuple = None
 
     try:
+        from backend.llm.sonasid_schema import is_schema_metadata_question
         from backend.llm.sonasid_sql import augment_sonasid_question_period, expand_sonasid_open_question
 
-        q_eff, expand_notice = expand_sonasid_open_question(q_eff)
-        if expand_notice:
-            notice_ui = expand_notice
-        q_eff, sonasid_auto = augment_sonasid_question_period(
-            q_eff, allowed_years=allowed_years_tuple
-        )
-        if sonasid_auto:
-            notice_ui = sonasid_auto
+        if not is_schema_metadata_question(q_eff):
+            q_eff, expand_notice = expand_sonasid_open_question(q_eff)
+            if expand_notice:
+                notice_ui = expand_notice
+            q_eff, sonasid_auto = augment_sonasid_question_period(
+                q_eff, allowed_years=allowed_years_tuple
+            )
+            if sonasid_auto:
+                notice_ui = sonasid_auto
     except Exception:
         pass
 
