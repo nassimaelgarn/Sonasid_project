@@ -138,6 +138,35 @@ def _navire_label_from_question(ql: str) -> str:
     return "navire demandé"
 
 
+_MONTH_FR = (
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+)
+
+
+def _label_period_bucket(p: str) -> str:
+    p = str(p or "").strip()
+    m = re.match(r"^(20\d{2})-(\d{2})$", p)
+    if m:
+        try:
+            mi = int(m.group(2))
+            if 1 <= mi <= 12:
+                return f"{_MONTH_FR[mi - 1]} {m.group(1)}"
+        except ValueError:
+            pass
+    return p
+
+
 def _build_monthly_series_message(
     question: str,
     rows: List[Dict[str, Any]],
@@ -170,25 +199,32 @@ def _build_monthly_series_message(
     def _fmt(v: float) -> str:
         return str(int(v)) if v == int(v) else f"{v:.2f}"
 
-    span = ""
+    span_label = ""
     if periods:
-        span = f"{periods[0]} → {periods[-1]}"
-        if year and (not periods[0].startswith(f"{year}-01") or not periods[-1].startswith(f"{year}-12")):
-            span = f"données {span}"
+        first = _label_period_bucket(periods[0])
+        last = _label_period_bucket(periods[-1])
+        if len(periods) == 1 or periods[0] == periods[-1]:
+            span_label = first
+        elif year and periods[0].startswith(f"{year}-01") and periods[-1].startswith(f"{year}-12"):
+            span_label = f"{first} → {last}"
+        else:
+            span_label = f"de {first} à {last}"
 
-    parts = [
-        title,
-        f"- **Périodes :** {len(vals)}" + (f" ({span})" if span else ""),
-        f"- **Min / max :** {_fmt(min(vals))} / {_fmt(max(vals))}",
-        f"- **Total sur la série :** {_fmt(sum(vals))}",
-    ]
-    if len(vals) >= 2:
-        delta = vals[-1] - vals[0]
-        sign = "+" if delta > 0 else ""
-        parts.append(
-            f"- **Tendance :** {sign}{_fmt(delta)} "
-            f"({_fmt(vals[0])} → {_fmt(vals[-1])}, {periods[0]} à {periods[-1]})"
-        )
+    parts = [title]
+    if len(vals) == 1:
+        parts.append(f"- **Période :** {span_label or _label_period_bucket(periods[0])}")
+        parts.append(f"- **Valeur :** {_fmt(vals[0])}")
+    else:
+        parts.append(f"- **Périodes :** {len(vals)}" + (f" ({span_label})" if span_label else ""))
+        parts.append(f"- **Min / max :** {_fmt(min(vals))} / {_fmt(max(vals))}")
+        parts.append(f"- **Total sur la série :** {_fmt(sum(vals))}")
+        if len(vals) >= 2:
+            delta = vals[-1] - vals[0]
+            sign = "+" if delta > 0 else ""
+            parts.append(
+                f"- **Tendance :** {sign}{_fmt(delta)} "
+                f"({_fmt(vals[0])} → {_fmt(vals[-1])}, {span_label or ''})"
+            )
     return "\n".join(parts)
 
 

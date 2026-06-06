@@ -271,6 +271,16 @@ def main() -> int:
     text, err = transcribe_audio_bytes(b"", fmt="webm")
     ok_all &= check("audio vide rejeté", text is None and err is not None)
 
+    print("\n=== 9. Libellé période mensuelle ===")
+    from backend.pipeline.pipeline import _build_monthly_series_message
+
+    one = _build_monthly_series_message(
+        "arrivages en 2026-01 par mois",
+        [{"period": "2026-01", "value": 3}],
+        metric_label="Arrivages",
+    )
+    ok_all &= check("1 mois sans flèche redondante", "janvier 2026" in one and "→" not in one)
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")
