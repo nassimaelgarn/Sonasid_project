@@ -21,6 +21,13 @@ import {
   pickRandomSonasidExamples,
 } from '../lib/sonasidCopy'
 import { ChatMarkdown } from '../lib/chatMarkdown'
+import {
+  exportBtnClass,
+  exportDashboardExcel,
+  exportDashboardPdf,
+  exportRowsExcel,
+  exportRowsPdf,
+} from '../lib/dashboardExport'
 import { SonasidBrandLogo, SteelPlantBackground } from '../lib/sonasidTheme'
 import {
   Chart as ChartJS,
@@ -1098,19 +1105,43 @@ function formatDashboardKpiValue(value, unit = '') {
   return unit ? `${formatted} ${unit}` : formatted
 }
 
-function DashboardPanel({ dashboard, theme }) {
+function DashboardPanel({ dashboard, theme, question = '', message = '' }) {
   if (!dashboard || typeof dashboard !== 'object') return null
   const kpis = Array.isArray(dashboard.kpis) ? dashboard.kpis : []
   const charts = Array.isArray(dashboard.charts) ? dashboard.charts : []
   if (!kpis.length && !charts.length) return null
 
+  const exportCtx = { question, message: String(message || '').replace(/\*\*/g, '') }
+
   return (
     <div className="mt-3 space-y-3">
-      {dashboard.title ? (
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          {dashboard.title}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {dashboard.title ? (
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {dashboard.title}
+          </div>
+        ) : (
+          <span />
+        )}
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            className={exportBtnClass}
+            onClick={() => exportDashboardExcel(dashboard, exportCtx)}
+            title="Télécharger le dashboard en Excel"
+          >
+            Excel
+          </button>
+          <button
+            type="button"
+            className={exportBtnClass}
+            onClick={() => exportDashboardPdf(dashboard, exportCtx)}
+            title="Télécharger le dashboard en PDF"
+          >
+            PDF
+          </button>
         </div>
-      ) : null}
+      </div>
       {kpis.length ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {kpis.map((kpi, i) => (
@@ -1137,6 +1168,32 @@ function DashboardPanel({ dashboard, theme }) {
           <ResultChart raw={{ question: chart.question || chart.title, result: chart.result }} theme={theme} />
         </div>
       ))}
+    </div>
+  )
+}
+
+function TableExportBar({ rows, title = 'Tableau Sonasid' }) {
+  if (!isTableRows(rows)) return null
+  const base = title.replace(/\s+/g, '-').slice(0, 40).toLowerCase()
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        Export
+      </span>
+      <button
+        type="button"
+        className={exportBtnClass}
+        onClick={() => exportRowsExcel(rows, { filename: `sonasid-${base}.xlsx`, sheetName: title })}
+      >
+        Excel
+      </button>
+      <button
+        type="button"
+        className={exportBtnClass}
+        onClick={() => exportRowsPdf(rows, { title, filename: `sonasid-${base}.pdf` })}
+      >
+        PDF
+      </button>
     </div>
   )
 }
@@ -3448,7 +3505,12 @@ export default function ChatWorkspace() {
 
                     </div>
                     {m.role !== 'user' && m?.meta?.raw?.dashboard ? (
-                      <DashboardPanel dashboard={m.meta.raw.dashboard} theme={theme} />
+                      <DashboardPanel
+                        dashboard={m.meta.raw.dashboard}
+                        theme={theme}
+                        question={m.meta.raw.question || getPrecedingUserContent(chat, idx)}
+                        message={m.content}
+                      />
                     ) : null}
                     {m.role !== 'user' && m?.meta?.raw && extractChartSpec(m.meta.raw) && !m?.meta?.raw?.dashboard ? (
                       <ResultChart raw={m.meta.raw} theme={theme} />
@@ -3458,10 +3520,14 @@ export default function ChatWorkspace() {
                         const rows = m.meta.raw.result
                         const isKpiCatalog = String(m.meta.raw?.source || '') === 'sql:kpi_catalog'
                         const expanded = Boolean(expandedRowsByMsg[idx]) || isKpiCatalog
-                        if (!expanded && rows.length <= 5) return null
+                        const tableTitle = isKpiCatalog
+                          ? 'Catalogue KPI Sonasid'
+                          : String(m.meta.raw?.question || 'Tableau Sonasid').slice(0, 60)
+                        const showTable = expanded || rows.length <= 5
                         return (
                           <div className="mt-2">
-                            {!expanded ? (
+                            <TableExportBar rows={rows} title={tableTitle} />
+                            {!showTable ? (
                               <button
                                 type="button"
                                 className="btn-ghost text-xs"
@@ -3481,7 +3547,7 @@ export default function ChatWorkspace() {
                                   <div className="text-[11px] text-slate-500 dark:text-slate-400">
                                     {rows.length} lignes
                                   </div>
-                                  {!isKpiCatalog ? (
+                                  {!isKpiCatalog && rows.length > 5 ? (
                                     <button
                                       type="button"
                                       className="btn-ghost text-xs"
