@@ -568,15 +568,22 @@ def process_question(question, model_name: str = "", session_id: Optional[str] =
             is_contextual_data_followup_text,
             merge_table_format_followup_from_history,
         )
+        from backend.llm.sonasid_brief import enrich_dashboard_question_from_history, is_explicit_dashboard_request
 
-        if is_contextual_data_followup_text(q_in) and session_id:
+        if session_id:
             from backend.rag.store import get_conversation_history
 
             prior = get_conversation_history(session_id=session_id, limit=80)
-            merged = merge_table_format_followup_from_history(q_in, prior)
-            if merged and merged.strip() and merged.strip() != q_in:
-                q_in = merged.strip()
-                question = q_in
+            if is_explicit_dashboard_request(q_in.lower()):
+                enriched = enrich_dashboard_question_from_history(q_in, prior)
+                if enriched and enriched.strip() != q_in:
+                    q_in = enriched.strip()
+                    question = q_in
+            if is_contextual_data_followup_text(q_in):
+                merged = merge_table_format_followup_from_history(q_in, prior)
+                if merged and merged.strip() and merged.strip() != q_in:
+                    q_in = merged.strip()
+                    question = q_in
     except Exception:
         pass
     _open_expanded = False
@@ -619,11 +626,12 @@ def process_question(question, model_name: str = "", session_id: Optional[str] =
         except Exception:
             pass
         _prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
-        _domain = (
-            "Tu es un analyste KPI pour le port & arrivages Sonasid.\n"
-            if _prof in {"sonasid", "shipping", "port"}
-            else "Tu es un analyste KPI pour une aciérie.\n"
-        )
+        if _prof in {"sonasid", "shipping", "port"}:
+            from backend.llm.sonasid_prompts import sonasid_analyst_domain
+
+            _domain = sonasid_analyst_domain()
+        else:
+            _domain = "Tu es un analyste KPI pour une aciérie.\n"
         sys = (
             _domain
             + "Des résultats chiffrés du dashboard viennent d’être calculés ; tu dois les interpréter.\n"
@@ -788,13 +796,15 @@ def process_question(question, model_name: str = "", session_id: Optional[str] =
                 "Exécute d’abord le KPI (avec période), puis clique sur **Analyser** sous le résultat."
             )
             return out
+        from backend.llm.sonasid_prompts import sonasid_analyst_domain
+
         sys = (
-            "Tu es un analyste décisionnel Sonasid (port & arrivages de matières premières).\n"
-            "Tu dois INTERPRÉTER les chiffres : tendance dans le temps, mois forts/faibles, saisonnalité, "
+            sonasid_analyst_domain()
+            + "Tu dois INTERPRÉTER les chiffres : tendance dans le temps, mois forts/faibles, saisonnalité, "
             "points d'attention logistiques.\n"
-            "Ne te contente pas de recopier les totaux : tire des insights métier à partir des données JSON.\n"
-            "Réponds en français (4 à 8 phrases ou puces courtes). N'invente aucune valeur absente des données.\n"
-            "Ne propose pas de nouvelle requête SQL.\n"
+            + "Ne te contente pas de recopier les totaux : tire des insights métier à partir des données JSON.\n"
+            + "Réponds en français (4 à 8 phrases ou puces courtes).\n"
+            + "Ne propose pas de nouvelle requête SQL.\n"
         )
         prompt = f"{sys}\n\nConsigne et données:\n{body}\n"
         model_hint = (

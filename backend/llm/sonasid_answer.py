@@ -218,12 +218,13 @@ def narrate_sql_result(
     if len(payload) > 5000:
         payload = payload[:5000] + "…"
 
+    from backend.llm.sonasid_prompts import sonasid_analyst_domain
+
     sys = (
-        "Tu es l'assistant décisionnel Sonasid (port & arrivages de matières premières).\n"
-        "Réponds en français avec intelligence et clarté (3 à 6 phrases ou puces courtes).\n"
-        "Interprète la question : tendance, comparaison, point clé, alerte, lecture métier (sans jargon SQL).\n"
-        "Base-toi UNIQUEMENT sur les données JSON fournies. N'invente aucun chiffre.\n"
-        "Ne montre jamais de SQL, de formule technique, ni de mention « synthèse automatique ».\n"
+        sonasid_analyst_domain()
+        + "Réponds en français avec intelligence et clarté (3 à 6 phrases ou puces courtes).\n"
+        + "Interprète la question : tendance, comparaison, point clé, alerte, lecture métier (sans jargon SQL).\n"
+        + "Ne montre jamais de SQL, de formule technique, ni de mention « synthèse automatique ».\n"
     )
     prompt = (
         f"{sys}\n\nQuestion utilisateur :\n{question.strip()}\n\n"
@@ -307,11 +308,13 @@ def llm_enrich_brief_message(
     if not base:
         return out
 
+    from backend.llm.sonasid_prompts import sonasid_analyst_domain
+
     sys = (
-        "Tu es analyste décisionnel Sonasid (port & arrivages de matières premières).\n"
-        "À partir des chiffres FACTUELS ci-dessous, rédige une courte **lecture métier** en français "
+        sonasid_analyst_domain()
+        + "À partir des chiffres FACTUELS ci-dessous, rédige une courte **lecture métier** en français "
         "(3 à 6 phrases ou puces) : tendances, comparaisons, points d'attention.\n"
-        "N'invente AUCUN chiffre — reprends uniquement ceux fournis. Ne recopie pas tout le tableau.\n"
+        "Ne recopie pas tout le tableau.\n"
     )
     prompt = f"{sys}\n\nQuestion utilisateur :\n{question.strip()}\n\nDonnées factuelles :\n{base}\n"
 

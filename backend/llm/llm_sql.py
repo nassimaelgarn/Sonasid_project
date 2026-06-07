@@ -632,6 +632,13 @@ def should_skip_kpi_rewrite(question: str) -> bool:
         return True
     if re.search(r"\ben\s+tableau\b", q):
         return True
+    try:
+        from backend.llm.sonasid_brief import is_explicit_dashboard_request
+
+        if is_explicit_dashboard_request(q):
+            return True
+    except Exception:
+        pass
     return False
 
 

@@ -180,6 +180,57 @@ def _is_vague_port_overview(ql: str) -> bool:
     return False
 
 
+def is_explicit_dashboard_request(ql: str) -> bool:
+    """Demande explicite de dashboard / visualisation (prioritaire sur un KPI isolé)."""
+    if re.search(r"\b(dashboard|dash\s*board|tableau\s+de\s+bord|tableau\s+bord)\b", ql):
+        return True
+    if re.search(
+        r"\b(cree|créer|creer|fais|genere|génère|generer|construis|construire|affiche|afficher|montre|montrer)\b",
+        ql,
+    ) and re.search(r"\b(dashboard|tableau\s+de\s+bord|tableau\s+bord)\b", ql):
+        return True
+    if re.search(r"\b(petit|mini|un|le)\s+(dashboard|tableau\s+de\s+bord)\b", ql):
+        return True
+    if re.search(r"\b(visualis|graphique|courbe|histogramme|charts?)\b", ql) and re.search(
+        r"\b(kpi|kip|indicateurs?|arrivages?|port|tonnage)\b", ql
+    ):
+        return True
+    return False
+
+
+def is_dashboard_context_followup(ql: str) -> bool:
+    """Relance « dashboard pour ces KPI / cette analyse » sans période explicite."""
+    if not is_explicit_dashboard_request(ql):
+        return False
+    return bool(
+        re.search(
+            r"\b(ces|cette|cela|ça|ca|les|analyse|analyser|kpi|kip|indicateurs?)\b",
+            ql,
+        )
+    )
+
+
+def enrich_dashboard_question_from_history(
+    question: str,
+    prior_messages: Optional[List[Dict[str, Any]]],
+) -> str:
+    """Complète une demande dashboard avec l'année du fil récent si absente."""
+    q = (question or "").strip()
+    if not q or re.search(r"\b(20\d{2})\b", q):
+        return q
+    if not is_dashboard_context_followup(q.lower()):
+        return q
+    try:
+        from backend.llm.llm_sql import _extract_year_from_messages
+
+        year = _extract_year_from_messages(prior_messages)
+        if year:
+            return f"{q} en {year}"
+    except Exception:
+        pass
+    return q
+
+
 def _year_clause(field: str, year: int) -> str:
     return f"{field} >= '{year:04d}-01-01' AND {field} < '{year + 1:04d}-01-01'"
 
@@ -203,6 +254,9 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
             return None
     except Exception:
         pass
+
+    if is_explicit_dashboard_request(ql):
+        return {"kind": "dashboard"}
 
     if _is_specific_kpi_question(ql):
         return None
@@ -231,7 +285,7 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
         return {"kind": "arrivages_analysis"}
 
     if re.search(r"\b(kpi|kip|indicateurs?)\b", ql) and re.search(
-        r"\b(résumé|resume|recap|récap|synthèse|synthese|tableau de bord|donne|donne-moi|tous|ensemble|global|principaux?|l'ensemble)\b",
+        r"\b(résumé|resume|recap|récap|synthèse|synthese|tableau de bord|dashboard|donne|donne-moi|tous|ensemble|global|principaux?|l'ensemble|analyse|analyser)\b",
         ql,
     ):
         return {"kind": "dashboard"}
@@ -268,14 +322,25 @@ def execute_sonasid_brief(question: str, kind: str) -> Dict[str, Any]:
 
 
 def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
+    import os
+
+    ql = re.sub(r"\s+", " ", normalize_kpi_question(question or "").lower()).strip()
+    monthly_focus = bool(re.search(r"\b(par mois|mensuel|chaque mois|mois par mois)\b", ql))
     period_label = ", ".join(str(y) for y in years)
+    t_suivi = (
+        os.getenv("AZURE_SQL_TABLE_SUIVI_DECHARGEMENT", "dbo.SUIVI_DECHARGEMENT")
+        or "dbo.SUIVI_DECHARGEMENT"
+    )
+
     lines: List[str] = [
-        f"**Résumé port & arrivages — {period_label}**",
+        f"**Dashboard port & arrivages — {period_label}**",
         "",
-        "Voici une synthèse des principaux indicateurs port & arrivages.",
+        "Synthèse visuelle des principaux indicateurs (cartes + graphiques ci-dessous).",
         "",
     ]
     all_rows: List[Dict[str, Any]] = []
+    kpi_cards: List[Dict[str, Any]] = []
+    charts: List[Dict[str, Any]] = []
 
     for year in years:
         df = "Arrivage_DateCreation"
@@ -300,9 +365,15 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
             f"INNER JOIN {T_ARRIVAGE} a ON c.Commande_ArrivageId = a.Arrivage_Id "
             f"{w_arr} AND t.Transfert_Actif = 1"
         )
+        ton_dech, _ = _scalar(
+            f"SELECT SUM(s.SuiviDechargement_QuantiteDecharge) "
+            f"FROM {t_suivi} s "
+            f"INNER JOIN {T_ARRIVAGE} a ON s.SuiviDechargement_ArrivageId = a.Arrivage_Id "
+            f"{w_arr}"
+        )
 
-        lines.append(f"### Année {year}")
         if err:
+            lines.append(f"### Année {year}")
             lines.append(friendly_db_error(err))
             return {
                 "question": question,
@@ -312,16 +383,23 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
                 "error": "DB_FIREWALL" if "40615" in str(err) or "not allowed" in str(err).lower() else "DB_ERROR",
                 "message": "\n".join(lines).strip(),
             }
-        lines.extend(
-            [
-                f"- **Navires actifs (référentiel)** : {_fmt_num(nav_actifs or 0)}",
-                f"- **Arrivages** : {_fmt_num(n_arr or 0)}",
-                f"- **Navires distincts ayant accosté** : {_fmt_num(nav_dist or 0)}",
-                f"- **Tonnage importé** : {_fmt_num(ton or 0)} t",
-                f"- **Tonnage transféré** : {_fmt_num(ton_trans or 0)} t",
-                "",
-            ]
-        )
+
+        year_cards = [
+            {"label": "Arrivages", "value": n_arr or 0, "unit": "", "year": year},
+            {"label": "Tonnage importé", "value": ton or 0, "unit": "t", "year": year},
+            {"label": "Tonnage transféré", "value": ton_trans or 0, "unit": "t", "year": year},
+            {"label": "Tonnage déchargé", "value": ton_dech or 0, "unit": "t", "year": year},
+            {"label": "Navires actifs", "value": nav_actifs or 0, "unit": "", "year": year},
+            {"label": "Navires distincts", "value": nav_dist or 0, "unit": "", "year": year},
+        ]
+        kpi_cards.extend(year_cards)
+
+        lines.append(f"### Année {year}")
+        for card in year_cards:
+            unit = f" {card['unit']}" if card.get("unit") else ""
+            lines.append(f"- **{card['label']}** : {_fmt_num(card['value'])}{unit}")
+        lines.append("")
+
         all_rows.append(
             {
                 "annee": year,
@@ -330,8 +408,57 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
                 "navires_distincts": nav_dist or 0,
                 "tonnage_importe": ton or 0,
                 "tonnage_transfere": ton_trans or 0,
+                "tonnage_decharge": ton_dech or 0,
             }
         )
+
+        mo_sql = (
+            f"SELECT CONVERT(char(7), a.{df}, 126) AS mois, COUNT(*) AS n, "
+            f"SUM(a.Arrivage_TonnageTotal) AS tonnage "
+            f"FROM {T_ARRIVAGE} a {w_arr} "
+            f"GROUP BY CONVERT(char(7), a.{df}, 126) ORDER BY mois"
+        )
+        mo_rows, _ = _rows(mo_sql)
+        if mo_rows:
+            arr_series = [{"period": str(mo), "value": float(n or 0)} for mo, n, _t in mo_rows]
+            ton_series = [{"period": str(mo), "value": float(t or 0)} for mo, _n, t in mo_rows]
+            charts.append(
+                {
+                    "title": f"Arrivages par mois ({year})",
+                    "kind": "line",
+                    "question": f"arrivages par mois en {year}",
+                    "result": arr_series,
+                }
+            )
+            charts.append(
+                {
+                    "title": f"Tonnage importé par mois ({year})",
+                    "kind": "line",
+                    "question": f"tonnage importé par mois en {year}",
+                    "result": ton_series,
+                }
+            )
+            for mo, n, t in mo_rows:
+                all_rows.append({"annee": year, "mois": mo, "arrivages": n, "tonnage": t or 0})
+
+        dech_sql = (
+            f"SELECT CONVERT(char(7), a.{df}, 126) AS mois, "
+            f"SUM(s.SuiviDechargement_QuantiteDecharge) AS tonnage "
+            f"FROM {t_suivi} s "
+            f"INNER JOIN {T_ARRIVAGE} a ON s.SuiviDechargement_ArrivageId = a.Arrivage_Id "
+            f"{w_arr} "
+            f"GROUP BY CONVERT(char(7), a.{df}, 126) ORDER BY mois"
+        )
+        dech_rows, _ = _rows(dech_sql)
+        if dech_rows:
+            charts.append(
+                {
+                    "title": f"Tonnage déchargé par mois ({year})",
+                    "kind": "line",
+                    "question": f"tonnage déchargé par mois en {year}",
+                    "result": [{"period": str(mo), "value": float(t or 0)} for mo, t in dech_rows],
+                }
+            )
 
         qual_sql = (
             f"SELECT TOP 8 q.Qualite_Libelle, COUNT(DISTINCT a.Arrivage_Id) AS n, "
@@ -344,9 +471,17 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
         )
         qual_rows, _ = _rows(qual_sql)
         if qual_rows:
-            lines.append("**Top qualités (arrivages / tonnage commandé)**")
+            charts.append(
+                {
+                    "title": f"Top qualités — tonnage ({year})",
+                    "kind": "bar",
+                    "question": f"top qualités tonnage en {year}",
+                    "result": [
+                        {"qualite": str(lib), "value": float(t or 0)} for lib, _n, t in qual_rows
+                    ],
+                }
+            )
             for lib, n, t in qual_rows:
-                lines.append(f"- {lib} : {_fmt_num(n)} arrivages · {_fmt_num(t or 0)} t commandées")
                 all_rows.append(
                     {
                         "annee": year,
@@ -355,30 +490,30 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
                         "tonnage_commande": t or 0,
                     }
                 )
-            lines.append("")
 
-        mo_sql = (
-            f"SELECT CONVERT(char(7), a.{df}, 126) AS mois, COUNT(*) AS n "
-            f"FROM {T_ARRIVAGE} a {w_arr} "
-            f"GROUP BY CONVERT(char(7), a.{df}, 126) ORDER BY mois"
-        )
-        mo_rows, _ = _rows(mo_sql)
-        if mo_rows:
-            vals = [float(r[1] or 0) for r in mo_rows]
-            lines.append(
-                f"**Arrivages par mois** : min {_fmt_num(min(vals))} · max {_fmt_num(max(vals))} · "
-                f"total {_fmt_num(sum(vals))} ({len(mo_rows)} mois)"
-            )
-            for mo, n in mo_rows[-3:]:
-                lines.append(f"- {mo} : {_fmt_num(n)}")
-            lines.append("")
+    primary_result: Any = all_rows
+    if monthly_focus and charts:
+        for ch in charts:
+            if "par mois" in str(ch.get("title") or "").lower() and "arrivages" in str(ch.get("title") or "").lower():
+                primary_result = ch.get("result") or all_rows
+                break
+    elif charts:
+        primary_result = charts[0].get("result") or all_rows
+
+    dashboard = {
+        "title": f"Dashboard port & arrivages — {period_label}",
+        "monthly": monthly_focus,
+        "kpis": kpi_cards,
+        "charts": charts,
+    }
 
     return {
         "question": question,
         "source": "sonasid:brief",
         "brief_kind": "dashboard",
         "years": years,
-        "result": all_rows,
+        "dashboard": dashboard,
+        "result": primary_result,
         "message": "\n".join(lines).strip(),
     }
 

@@ -34,9 +34,11 @@ def _rewrite_provider_mode() -> str:
 def _build_rewrite_messages(*, user_question: str, extra_context: str) -> list:
     prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
     if prof in {"sonasid", "shipping", "port"}:
+        from backend.llm.sonasid_prompts import sonasid_kpi_rewrite_domain
+
         sys = (
-            "Tu es l'assistant KPI Sonasid (port, navires cargo, arrivages, tonnages, fournisseurs).\n"
-            "L'utilisateur écrit en français libre, souvent avec fautes d'orthographe — corrige-les mentalement.\n"
+            sonasid_kpi_rewrite_domain()
+            + "L'utilisateur écrit en français libre, souvent avec fautes d'orthographe — corrige-les mentalement.\n"
             "Tâche : reformuler en UNE phrase KPI claire que le moteur SQL comprend.\n"
             "Garde période (2025, 2025-01, janvier 2025), id fournisseur/navire, indicateur (tonnage importé, "
             "arrivages, navires actifs, déchargement, transfert, qualité…).\n"

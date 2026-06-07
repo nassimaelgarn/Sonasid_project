@@ -1088,6 +1088,59 @@ function ResultChart({ raw, theme }) {
   )
 }
 
+function formatDashboardKpiValue(value, unit = '') {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return String(value ?? '—')
+  const formatted =
+    Math.abs(n - Math.round(n)) < 1e-6
+      ? Math.round(n).toLocaleString('fr-FR')
+      : n.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+  return unit ? `${formatted} ${unit}` : formatted
+}
+
+function DashboardPanel({ dashboard, theme }) {
+  if (!dashboard || typeof dashboard !== 'object') return null
+  const kpis = Array.isArray(dashboard.kpis) ? dashboard.kpis : []
+  const charts = Array.isArray(dashboard.charts) ? dashboard.charts : []
+  if (!kpis.length && !charts.length) return null
+
+  return (
+    <div className="mt-3 space-y-3">
+      {dashboard.title ? (
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          {dashboard.title}
+        </div>
+      ) : null}
+      {kpis.length ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {kpis.map((kpi, i) => (
+            <div
+              key={`${kpi.label}-${kpi.year}-${i}`}
+              className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 dark:border-slate-600/50 dark:bg-slate-900/35"
+            >
+              <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {kpi.label}
+                {kpi.year ? ` · ${kpi.year}` : ''}
+              </div>
+              <div className="mt-1 text-lg font-semibold text-slate-800 dark:text-slate-100">
+                {formatDashboardKpiValue(kpi.value, kpi.unit || '')}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {charts.map((chart, i) => (
+        <div key={`${chart.title}-${i}`}>
+          {chart.title ? (
+            <div className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-300">{chart.title}</div>
+          ) : null}
+          <ResultChart raw={{ question: chart.question || chart.title, result: chart.result }} theme={theme} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function MiniTable({ rows, maxHeight = 260 }) {
   if (!isTableRows(rows)) return null
   const cols = Object.keys(rows[0]).slice(0, 6)
@@ -3394,7 +3447,10 @@ export default function ChatWorkspace() {
                       </div>
 
                     </div>
-                    {m.role !== 'user' && m?.meta?.raw && extractChartSpec(m.meta.raw) ? (
+                    {m.role !== 'user' && m?.meta?.raw?.dashboard ? (
+                      <DashboardPanel dashboard={m.meta.raw.dashboard} theme={theme} />
+                    ) : null}
+                    {m.role !== 'user' && m?.meta?.raw && extractChartSpec(m.meta.raw) && !m?.meta?.raw?.dashboard ? (
                       <ResultChart raw={m.meta.raw} theme={theme} />
                     ) : null}
                     {m.role !== 'user' && m?.meta?.raw && isTableRows(m.meta.raw.result) ? (

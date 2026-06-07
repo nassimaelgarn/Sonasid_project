@@ -398,7 +398,6 @@ def main() -> int:
 
     print("\n=== 15. Catalogue KPI en tableau ===")
     from backend.llm.llm_sql import is_kpi_catalog_table_request, kpi_catalog_table_reply
-    from backend.llm.sonasid_brief import detect_sonasid_brief
 
     cat_q = "donne moi les kpi presents dans la base sous forme de tableau"
     ok_all &= check("detecte catalogue KPI tableau", is_kpi_catalog_table_request(cat_q), cat_q)
@@ -414,6 +413,46 @@ def main() -> int:
         and isinstance(cat_rep.get("result"), list)
         and len(cat_rep.get("result") or []) >= 5,
         f"rows={len(cat_rep.get('result') or [])}",
+    )
+
+    print("\n=== 16. Prompts — accès base Azure SQL ===")
+    from backend.llm.sonasid_prompts import (
+        sonasid_analyst_domain,
+        sonasid_assistant_domain,
+        sonasid_db_access_block,
+        sonasid_kpi_rewrite_domain,
+    )
+
+    block = sonasid_db_access_block()
+    ok_all &= check("mention Azure SQL", "Azure SQL" in block, block[:60])
+    ok_all &= check("mention toute la base", "TOUTE" in block, block[:60])
+    ok_all &= check("interdit refus accès", "JAMAIS" in block and "accès" in block.lower(), block[:60])
+    conv = sonasid_assistant_domain(conversational=True)
+    ok_all &= check("prompt conversationnel sans N'exécute pas SQL", "N'exécute pas" not in conv, conv[:80])
+    ok_all &= check("prompt KPI rewrite accès base", "Azure SQL" in sonasid_kpi_rewrite_domain(), "")
+    ok_all &= check("prompt analyste accès base", "Azure SQL" in sonasid_analyst_domain(), "")
+
+    print("\n=== 17. Demande dashboard explicite ===")
+    from backend.llm.sonasid_brief import enrich_dashboard_question_from_history, is_explicit_dashboard_request
+
+    dash_q = "tu peux me créer un petit dashboard pour analyse ces KPI"
+    dash_m = "tu peux me créer un petit dashboard pour analyse ces KPI par mois"
+    ok_all &= check("detecte dashboard explicite", is_explicit_dashboard_request(dash_q.lower()), dash_q[:50])
+    ok_all &= check(
+        "route brief dashboard",
+        (detect_sonasid_brief(dash_q) or {}).get("kind") == "dashboard",
+        str(detect_sonasid_brief(dash_q)),
+    )
+    ok_all &= check(
+        "dashboard par mois (pas KPI isolé)",
+        (detect_sonasid_brief(dash_m) or {}).get("kind") == "dashboard",
+        str(detect_sonasid_brief(dash_m)),
+    )
+    prior = [{"role": "user", "content": "tonnage déchargé en 2025"}]
+    ok_all &= check(
+        "enrichit année depuis historique",
+        "2025" in enrich_dashboard_question_from_history(dash_q, prior),
+        enrich_dashboard_question_from_history(dash_q, prior),
     )
 
     print("\n=== Résultat ===")

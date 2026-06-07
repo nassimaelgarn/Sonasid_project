@@ -174,11 +174,9 @@ def conversational_reply(
 
     prof = (os.getenv("AZURE_SQL_PROFILE", "sonasid") or "sonasid").strip().lower()
     if prof in {"sonasid", "shipping", "port"}:
-        domain = (
-            "Tu es l’assistant décisionnel Sonasid (port & arrivages de matières premières). "
-            "Comportement type ChatGPT : tolère les fautes, devine l'intention, réponds avec intelligence métier (port, arrivages, tonnages).\n"
-            "Pour les chiffres : oriente vers un KPI avec période (ex. tonnage importé en 2025) — n'invente jamais de chiffres.\n"
-        )
+        from backend.llm.sonasid_prompts import sonasid_assistant_domain
+
+        domain = sonasid_assistant_domain(conversational=True)
     else:
         domain = (
             "Tu es l’assistant KPI d’une aciérie. Réponds en français, de façon claire.\n"
@@ -193,7 +191,7 @@ def conversational_reply(
         domain
         + "Réponds en français avec clarté et intelligence (3 à 6 phrases ou puces courtes si utile).\n"
         + "Interprète la question même si elle est mal formulée. Sois pertinent, nuancé, professionnel.\n"
-        + "Ne termine pas systématiquement par une question. Ne réponds jamais par « Résultat: 1 ». N’exécute pas de SQL.\n"
+        + "Ne termine pas systématiquement par une question. Ne réponds jamais par « Résultat: 1 ».\n"
     )
     prompt = f"{sys}\n\nQuestion:\n{q}\n\nContexte (RAG, optionnel):\n{rag or '(vide)'}\n"
 
