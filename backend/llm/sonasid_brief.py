@@ -321,11 +321,35 @@ def execute_sonasid_brief(question: str, kind: str) -> Dict[str, Any]:
     return _run_arrivages_analysis(q, years)
 
 
+def _exec_kpi_scalar(question: str) -> Tuple[Optional[float], Optional[str]]:
+    """Exécute un KPI Sonasid déterministe et retourne un scalaire."""
+    try:
+        from backend.llm.sonasid_sql import try_sonasid_kpi_sql
+
+        sql_res = try_sonasid_kpi_sql(question)
+        if not sql_res or isinstance(sql_res, dict):
+            return None, None
+        return _scalar(str(sql_res))
+    except Exception:
+        return None, None
+
+
+def _is_all_kpi_dashboard_request(ql: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(tous les kpi|tous les kpis|tous les indicateurs|kpi presents|kpi présents|"
+            r"indicateurs disponibles|indicateurs en base)\b",
+            ql,
+        )
+    )
+
+
 def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
     import os
 
     ql = re.sub(r"\s+", " ", normalize_kpi_question(question or "").lower()).strip()
     monthly_focus = bool(re.search(r"\b(par mois|mensuel|chaque mois|mois par mois)\b", ql))
+    all_kpi = _is_all_kpi_dashboard_request(ql)
     period_label = ", ".join(str(y) for y in years)
     t_suivi = (
         os.getenv("AZURE_SQL_TABLE_SUIVI_DECHARGEMENT", "dbo.SUIVI_DECHARGEMENT")
@@ -333,9 +357,9 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
     )
 
     lines: List[str] = [
-        f"**Dashboard port & arrivages — {period_label}**",
+        f"**Dashboard{' KPI' if all_kpi else ''} port & arrivages — {period_label}**",
         "",
-        "Synthèse visuelle des principaux indicateurs (cartes + graphiques ci-dessous).",
+        "Synthèse visuelle des indicateurs clés (cartes KPI + graphiques ci-dessous).",
         "",
     ]
     all_rows: List[Dict[str, Any]] = []
@@ -398,6 +422,21 @@ def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
         for card in year_cards:
             unit = f" {card['unit']}" if card.get("unit") else ""
             lines.append(f"- **{card['label']}** : {_fmt_num(card['value'])}{unit}")
+
+        if all_kpi:
+            for label, q_tpl, unit in (
+                ("Navires en déchargement", "nombre de navires en déchargement", ""),
+                ("Tonnage déchargé (en cours)", "tonnage déchargé en déchargement", "t"),
+                ("Tonnage restant à décharger", "tonnage restant à décharger", "t"),
+                ("Valeur marchandises importées", f"valeur des marchandises importées en {year}", "t"),
+            ):
+                val, _ = _exec_kpi_scalar(q_tpl)
+                if val is not None:
+                    card = {"label": label, "value": val, "unit": unit, "year": year}
+                    kpi_cards.append(card)
+                    u = f" {unit}" if unit else ""
+                    lines.append(f"- **{label}** : {_fmt_num(val)}{u}")
+
         lines.append("")
 
         all_rows.append(

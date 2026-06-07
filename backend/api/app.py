@@ -894,6 +894,33 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
         )
 
         q_schema = normalize_user_question(q_raw)
+        try:
+            from backend.llm.sonasid_brief import (
+                detect_sonasid_brief,
+                enrich_dashboard_question_from_history,
+                execute_sonasid_brief,
+                is_explicit_dashboard_request,
+            )
+
+            q_brief = q_schema
+            if is_explicit_dashboard_request(q_schema):
+                q_brief = normalize_user_question(
+                    enrich_dashboard_question_from_history(q_raw, prior)
+                )
+            brief_hint = detect_sonasid_brief(q_brief)
+            if brief_hint:
+                try:
+                    add_memory(session_id=sid, role="user", content=q_raw)
+                except Exception:
+                    pass
+                res = execute_sonasid_brief(q_brief, brief_hint["kind"])
+                try:
+                    add_memory(session_id=sid, role="assistant", content=_assistant_memory_content(res))
+                except Exception:
+                    pass
+                return res
+        except Exception:
+            pass
         if is_kpi_catalog_table_request(q_schema):
             try:
                 add_memory(session_id=sid, role="user", content=q_raw)

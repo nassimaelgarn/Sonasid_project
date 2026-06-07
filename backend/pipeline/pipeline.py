@@ -884,18 +884,18 @@ def process_question(question, model_name: str = "", session_id: Optional[str] =
 
     if _sonasid_pipe:
         try:
-            from backend.llm.llm_sql import is_kpi_catalog_table_request, kpi_catalog_table_reply
-
-            if is_kpi_catalog_table_request(q_in):
-                return attach_rewrite(kpi_catalog_table_reply(q_in))
-        except Exception:
-            pass
-        try:
             from backend.llm.sonasid_brief import detect_sonasid_brief, execute_sonasid_brief
 
             brief_hint = detect_sonasid_brief(q_in)
             if brief_hint:
                 return attach_rewrite(execute_sonasid_brief(q_in, brief_hint["kind"]))
+        except Exception:
+            pass
+        try:
+            from backend.llm.llm_sql import is_kpi_catalog_table_request, kpi_catalog_table_reply
+
+            if is_kpi_catalog_table_request(q_in):
+                return attach_rewrite(kpi_catalog_table_reply(q_in))
         except Exception:
             pass
 

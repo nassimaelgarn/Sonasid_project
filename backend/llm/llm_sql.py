@@ -420,6 +420,13 @@ def is_kpi_catalog_table_request(text: str) -> bool:
     ql = re.sub(r"\s+", " ", (text or "").lower()).strip()
     if not ql:
         return False
+    try:
+        from backend.llm.sonasid_brief import is_explicit_dashboard_request
+
+        if is_explicit_dashboard_request(ql):
+            return False
+    except Exception:
+        pass
     has_kpi = bool(re.search(r"\b(kpi|kip|indicateurs?)\b", ql))
     has_table = bool(
         re.search(r"\b(tableau|tableaux|tabulaire|sous forme de tableau|sous forme de table)\b", ql)

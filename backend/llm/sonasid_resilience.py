@@ -35,6 +35,14 @@ def try_deterministic_sonasid_reply(question: str) -> Optional[Dict[str, Any]]:
 
         if is_schema_metadata_question(q):
             return schema_metadata_reply(q)
+        try:
+            from backend.llm.sonasid_brief import detect_sonasid_brief, execute_sonasid_brief
+
+            brief_hint = detect_sonasid_brief(q)
+            if brief_hint:
+                return execute_sonasid_brief(q, brief_hint["kind"])
+        except Exception:
+            pass
         if is_kpi_catalog_table_request(q):
             return kpi_catalog_table_reply(q)
         if is_data_coverage_question(q):

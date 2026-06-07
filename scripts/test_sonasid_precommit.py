@@ -455,6 +455,23 @@ def main() -> int:
         enrich_dashboard_question_from_history(dash_q, prior),
     )
 
+    print("\n=== 18. Dashboard vs catalogue KPI ===")
+    from backend.llm.llm_sql import is_kpi_catalog_table_request
+
+    all_kpi_dash = "vasy crée moi un petit dashboard pour analyse de tous les KPI presents dans la base"
+    ok_all &= check(
+        "dashboard tous KPI ≠ catalogue",
+        not is_kpi_catalog_table_request(all_kpi_dash),
+        all_kpi_dash[:60],
+    )
+    ok_all &= check(
+        "route dashboard tous KPI",
+        (detect_sonasid_brief(all_kpi_dash) or {}).get("kind") == "dashboard",
+        str(detect_sonasid_brief(all_kpi_dash)),
+    )
+    cat_q_only = "donne moi les kpi presents dans la base sous forme de tableau"
+    ok_all &= check("catalogue tableau seul", is_kpi_catalog_table_request(cat_q_only), cat_q_only[:50])
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")
