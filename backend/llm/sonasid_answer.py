@@ -308,15 +308,47 @@ def llm_enrich_brief_message(
     if not base:
         return out
 
+    dash = out.get("dashboard") if isinstance(out.get("dashboard"), dict) else {}
+    facts = base
+    if dash:
+        import json
+
+        extra: List[str] = []
+        kpis = dash.get("kpis")
+        if isinstance(kpis, list) and kpis:
+            extra.append("Cartes KPI (JSON) :\n" + json.dumps(kpis, ensure_ascii=False, default=str))
+        charts = dash.get("charts")
+        if isinstance(charts, list):
+            for ch in charts[:5]:
+                if not isinstance(ch, dict):
+                    continue
+                title = ch.get("title")
+                series = ch.get("result")
+                if title and isinstance(series, list) and series:
+                    extra.append(
+                        f"{title} :\n"
+                        + json.dumps(series[:14], ensure_ascii=False, default=str)
+                    )
+        if extra:
+            facts = base + "\n\n" + "\n\n".join(extra)
+
     from backend.llm.sonasid_prompts import sonasid_analyst_domain
 
-    sys = (
-        sonasid_analyst_domain()
-        + "À partir des chiffres FACTUELS ci-dessous, rédige une courte **lecture métier** en français "
-        "(3 à 6 phrases ou puces) : tendances, comparaisons, points d'attention.\n"
-        "Ne recopie pas tout le tableau.\n"
-    )
-    prompt = f"{sys}\n\nQuestion utilisateur :\n{question.strip()}\n\nDonnées factuelles :\n{base}\n"
+    analysis_mode = bool(out.get("dashboard_analysis_requested"))
+    sys = sonasid_analyst_domain()
+    if analysis_mode:
+        sys += (
+            "Tu rédiges une **analyse du dashboard** port & arrivages à partir des chiffres ci-dessous.\n"
+            "Structure : 4 à 8 phrases ou puces — activité portuaire, volumes (import / transfert / déchargement), "
+            "saisonnalité mensuelle si des séries sont fournies, points d'attention logistiques.\n"
+        )
+    else:
+        sys += (
+            "À partir des chiffres FACTUELS ci-dessous, rédige une courte **lecture métier** en français "
+            "(3 à 6 phrases ou puces) : tendances, comparaisons, points d'attention.\n"
+        )
+    sys += "Ne recopie pas tout le tableau. N'invente aucun chiffre absent des données.\n"
+    prompt = f"{sys}\n\nQuestion utilisateur :\n{question.strip()}\n\nDonnées factuelles :\n{facts}\n"
 
     text = ""
     try:
@@ -377,7 +409,25 @@ def finalize_user_response(
         return out
 
     if str(out.get("source") or "").startswith("sonasid:brief"):
-        out = llm_enrich_brief_message(out, question=question, model_name=model_name)
+        skip_enrich = (
+            out.get("brief_kind") == "dashboard" and not out.get("dashboard_analysis_requested")
+        )
+        if not skip_enrich:
+            out = llm_enrich_brief_message(out, question=question, model_name=model_name)
+        if out.get("dashboard_analysis_requested") and "**Lecture métier**" not in str(
+            out.get("message") or ""
+        ):
+            try:
+                from backend.llm.sonasid_brief import _deterministic_dashboard_analysis
+
+                det = _deterministic_dashboard_analysis(out)
+                if det:
+                    base = str(out.get("message") or "").strip()
+                    out = dict(out)
+                    out["message"] = f"{base}\n\n---\n\n{det}".strip()
+                    out["dashboard_analysis_deterministic"] = True
+            except Exception:
+                pass
         out = dict(out)
         out.pop("formula", None)
         return out

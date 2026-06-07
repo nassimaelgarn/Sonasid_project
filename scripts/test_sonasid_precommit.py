@@ -434,9 +434,12 @@ def main() -> int:
 
     print("\n=== 17. Demande dashboard explicite ===")
     from backend.llm.sonasid_brief import enrich_dashboard_question_from_history, is_explicit_dashboard_request
+    from backend.llm.sonasid_brief import is_dashboard_analysis_request
 
     dash_q = "tu peux me créer un petit dashboard pour analyse ces KPI"
     dash_m = "tu peux me créer un petit dashboard pour analyse ces KPI par mois"
+    analyse_dash = "je veux une analyse du dashboard"
+    analyse_dash = "je veux une analyse du dashboard"
     ok_all &= check("detecte dashboard explicite", is_explicit_dashboard_request(dash_q.lower()), dash_q[:50])
     ok_all &= check(
         "route brief dashboard",
@@ -453,6 +456,18 @@ def main() -> int:
         "enrichit année depuis historique",
         "2025" in enrich_dashboard_question_from_history(dash_q, prior),
         enrich_dashboard_question_from_history(dash_q, prior),
+    )
+    ok_all &= check("detecte analyse dashboard", is_dashboard_analysis_request(analyse_dash), analyse_dash)
+    ok_all &= check(
+        "route analyse dashboard + flag",
+        (detect_sonasid_brief(analyse_dash) or {}).get("kind") == "dashboard"
+        and bool((detect_sonasid_brief(analyse_dash) or {}).get("with_analysis")),
+        str(detect_sonasid_brief(analyse_dash)),
+    )
+    ok_all &= check(
+        "analyse dashboard ≠ création dashboard",
+        not is_explicit_dashboard_request(analyse_dash),
+        analyse_dash,
     )
 
     print("\n=== 18. Dashboard vs catalogue KPI ===")

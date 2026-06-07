@@ -888,7 +888,18 @@ def process_question(question, model_name: str = "", session_id: Optional[str] =
 
             brief_hint = detect_sonasid_brief(q_in)
             if brief_hint:
-                return attach_rewrite(execute_sonasid_brief(q_in, brief_hint["kind"]))
+                out = execute_sonasid_brief(
+                    q_in,
+                    brief_hint["kind"],
+                    with_analysis=bool(brief_hint.get("with_analysis")),
+                )
+                try:
+                    from backend.llm.sonasid_answer import finalize_user_response
+
+                    out = finalize_user_response(out, q_in, model_name=chat_model)
+                except Exception:
+                    pass
+                return attach_rewrite(out)
         except Exception:
             pass
         try:

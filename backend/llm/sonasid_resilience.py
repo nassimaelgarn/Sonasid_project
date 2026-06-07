@@ -40,7 +40,11 @@ def try_deterministic_sonasid_reply(question: str) -> Optional[Dict[str, Any]]:
 
             brief_hint = detect_sonasid_brief(q)
             if brief_hint:
-                return execute_sonasid_brief(q, brief_hint["kind"])
+                return execute_sonasid_brief(
+                    q,
+                    brief_hint["kind"],
+                    with_analysis=bool(brief_hint.get("with_analysis")),
+                )
         except Exception:
             pass
         if is_kpi_catalog_table_request(q):

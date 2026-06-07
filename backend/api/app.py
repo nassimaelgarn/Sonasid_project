@@ -899,11 +899,12 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
                 detect_sonasid_brief,
                 enrich_dashboard_question_from_history,
                 execute_sonasid_brief,
+                is_dashboard_analysis_request,
                 is_explicit_dashboard_request,
             )
 
             q_brief = q_schema
-            if is_explicit_dashboard_request(q_schema):
+            if is_explicit_dashboard_request(q_schema) or is_dashboard_analysis_request(q_schema):
                 q_brief = normalize_user_question(
                     enrich_dashboard_question_from_history(q_raw, prior)
                 )
@@ -913,7 +914,18 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
                     add_memory(session_id=sid, role="user", content=q_raw)
                 except Exception:
                     pass
-                res = execute_sonasid_brief(q_brief, brief_hint["kind"])
+                res = execute_sonasid_brief(
+                    q_brief,
+                    brief_hint["kind"],
+                    with_analysis=bool(brief_hint.get("with_analysis")),
+                )
+                try:
+                    from backend.llm.sonasid_answer import finalize_user_response
+
+                    model_hint = (payload.model_name or "").strip()
+                    res = finalize_user_response(res, q_brief, model_name=model_hint)
+                except Exception:
+                    pass
                 try:
                     add_memory(session_id=sid, role="assistant", content=_assistant_memory_content(res))
                 except Exception:

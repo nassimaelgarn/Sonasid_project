@@ -180,8 +180,23 @@ def _is_vague_port_overview(ql: str) -> bool:
     return False
 
 
+def is_dashboard_analysis_request(ql: str) -> bool:
+    """Demande d'interprétation / lecture métier du dashboard (pas une recréation)."""
+    if not re.search(r"\b(dashboard|dash\s*board|tableau\s+de\s+bord|tableau\s+bord)\b", ql):
+        return False
+    return bool(
+        re.search(
+            r"\b(analyse|analyser|interpréter|interpreter|comment|explique|expliquer|"
+            r"lecture|insights?|interprétation|interpretation|synthèse|synthese)\b",
+            ql,
+        )
+    )
+
+
 def is_explicit_dashboard_request(ql: str) -> bool:
     """Demande explicite de dashboard / visualisation (prioritaire sur un KPI isolé)."""
+    if is_dashboard_analysis_request(ql):
+        return False
     if re.search(r"\b(dashboard|dash\s*board|tableau\s+de\s+bord|tableau\s+bord)\b", ql):
         return True
     if re.search(
@@ -199,7 +214,9 @@ def is_explicit_dashboard_request(ql: str) -> bool:
 
 
 def is_dashboard_context_followup(ql: str) -> bool:
-    """Relance « dashboard pour ces KPI / cette analyse » sans période explicite."""
+    """Relance dashboard / analyse dashboard sans période explicite."""
+    if is_dashboard_analysis_request(ql):
+        return True
     if not is_explicit_dashboard_request(ql):
         return False
     return bool(
@@ -254,6 +271,9 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
             return None
     except Exception:
         pass
+
+    if is_dashboard_analysis_request(ql):
+        return {"kind": "dashboard", "with_analysis": True}
 
     if is_explicit_dashboard_request(ql):
         return {"kind": "dashboard"}
@@ -312,12 +332,16 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
     return None
 
 
-def execute_sonasid_brief(question: str, kind: str) -> Dict[str, Any]:
+def execute_sonasid_brief(question: str, kind: str, *, with_analysis: bool = False) -> Dict[str, Any]:
     q = normalize_kpi_question(question)
     years = _resolve_brief_years(q)
 
     if kind == "dashboard":
-        return _run_dashboard(q, years)
+        out = _run_dashboard(q, years)
+        if with_analysis:
+            out = dict(out)
+            out["dashboard_analysis_requested"] = True
+        return out
     return _run_arrivages_analysis(q, years)
 
 
@@ -342,6 +366,89 @@ def _is_all_kpi_dashboard_request(ql: str) -> bool:
             ql,
         )
     )
+
+
+def _deterministic_dashboard_analysis(out: Dict[str, Any]) -> str:
+    """Lecture métier déterministe à partir des cartes / séries du dashboard."""
+    dash = out.get("dashboard") if isinstance(out.get("dashboard"), dict) else {}
+    kpis = dash.get("kpis") if isinstance(dash.get("kpis"), list) else []
+    charts = dash.get("charts") if isinstance(dash.get("charts"), list) else []
+    if not kpis:
+        return ""
+
+    by_year: Dict[Any, Dict[str, float]] = {}
+    for k in kpis:
+        if not isinstance(k, dict):
+            continue
+        year = k.get("year")
+        label = str(k.get("label") or "").strip()
+        val = k.get("value")
+        if label and isinstance(val, (int, float)):
+            by_year.setdefault(year, {})[label] = float(val)
+
+    lines: List[str] = ["**Lecture métier**", ""]
+    for year in sorted(by_year.keys(), key=lambda y: (y is None, y)):
+        m = by_year[year]
+        year_lbl = f"**{year}**" if year is not None else "**Période**"
+        lines.append(year_lbl)
+        arr = m.get("Arrivages")
+        nav_d = m.get("Navires distincts")
+        ton_imp = m.get("Tonnage importé")
+        ton_trans = m.get("Tonnage transféré")
+        ton_dech = m.get("Tonnage déchargé")
+        if isinstance(arr, float) and isinstance(nav_d, float) and nav_d > 0:
+            lines.append(
+                f"- **Activité portuaire :** {_fmt_num(arr)} arrivages pour "
+                f"{_fmt_num(nav_d)} navires distincts "
+                f"(≈ {arr / nav_d:.1f} arrivage/navire)."
+            )
+        if isinstance(ton_imp, float) and ton_imp > 0 and isinstance(ton_trans, float):
+            pct = ton_trans / ton_imp * 100.0
+            lines.append(
+                f"- **Transferts :** {_fmt_num(ton_trans)} t transférées sur "
+                f"{_fmt_num(ton_imp)} t importées (≈ {pct:.1f} %)."
+            )
+        if isinstance(ton_dech, float) and isinstance(ton_imp, float) and ton_imp > 0:
+            pct_d = ton_dech / ton_imp * 100.0
+            lines.append(
+                f"- **Déchargement :** {_fmt_num(ton_dech)} t déchargées "
+                f"(≈ {pct_d:.1f} % du tonnage importé)."
+            )
+        if isinstance(ton_trans, float) and isinstance(ton_dech, float):
+            ecart = ton_dech - ton_trans
+            if abs(ecart) > 1:
+                sens = "supérieur" if ecart > 0 else "inférieur"
+                lines.append(
+                    f"- **Écart déchargement / transfert :** le déchargé est {sens} "
+                    f"de {_fmt_num(abs(ecart))} t — à croiser avec les opérations en cours."
+                )
+        lines.append("")
+
+    for ch in charts:
+        title = str(ch.get("title") or "").lower()
+        series = ch.get("result") if isinstance(ch.get("result"), list) else []
+        if not series or "par mois" not in title:
+            continue
+        vals = [float(r.get("value") or 0) for r in series if isinstance(r, dict)]
+        if len(vals) < 2:
+            continue
+        peak_i = max(range(len(vals)), key=lambda i: vals[i])
+        low_i = min(range(len(vals)), key=lambda i: vals[i])
+        labels = [str(r.get("period") or "") for r in series if isinstance(r, dict)]
+        peak_l = labels[peak_i] if peak_i < len(labels) else "?"
+        low_l = labels[low_i] if low_i < len(labels) else "?"
+        metric = "arrivages" if "arrivage" in title else "tonnage"
+        lines.append(
+            f"- **Saisonnalité ({metric}) :** pic en {peak_l} ({_fmt_num(vals[peak_i])}), "
+            f"creux en {low_l} ({_fmt_num(vals[low_i])}) sur {len(vals)} mois."
+        )
+        break
+
+    lines.append(
+        "- **Points d'attention :** croiser volumes importés, transferts et déchargements "
+        "pour repérer retards logistiques ou navires encore en opération."
+    )
+    return "\n".join(lines).strip()
 
 
 def _run_dashboard(question: str, years: List[int]) -> Dict[str, Any]:
