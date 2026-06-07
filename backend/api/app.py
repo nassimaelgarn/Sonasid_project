@@ -880,7 +880,14 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
     # Schéma / structure table : réponse immédiate (dictionnaire + Azure), sans KPI ni LLM.
     try:
         from backend.llm.llm_sql import normalize_user_question
-        from backend.llm.sonasid_schema import is_schema_metadata_question, schema_metadata_reply
+        from backend.llm.sonasid_schema import (
+            company_overview_reply,
+            data_coverage_reply,
+            is_data_coverage_question,
+            is_sonasid_company_question,
+            is_schema_metadata_question,
+            schema_metadata_reply,
+        )
 
         q_schema = normalize_user_question(q_raw)
         if is_schema_metadata_question(q_schema):
@@ -894,14 +901,23 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
             except Exception:
                 pass
             return res
-        from backend.llm.sonasid_schema import company_overview_reply, is_sonasid_company_question
-
         if is_sonasid_company_question(q_schema):
             try:
                 add_memory(session_id=sid, role="user", content=q_raw)
             except Exception:
                 pass
             res = company_overview_reply(q_schema)
+            try:
+                add_memory(session_id=sid, role="assistant", content=_assistant_memory_content(res))
+            except Exception:
+                pass
+            return res
+        if is_data_coverage_question(q_schema):
+            try:
+                add_memory(session_id=sid, role="user", content=q_raw)
+            except Exception:
+                pass
+            res = data_coverage_reply(q_schema)
             try:
                 add_memory(session_id=sid, role="assistant", content=_assistant_memory_content(res))
             except Exception:

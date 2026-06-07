@@ -49,12 +49,14 @@ def should_use_kpi_pipeline(text: str) -> bool:
     if is_table_format_followup_text(t) or is_contextual_data_followup_text(t):
         return True
     try:
-        from backend.llm.sonasid_schema import is_schema_metadata_question, is_sonasid_company_question
+        from backend.llm.sonasid_schema import is_data_coverage_question, is_schema_metadata_question, is_sonasid_company_question
 
         if is_schema_metadata_question(t):
             return False
         if is_sonasid_company_question(t):
             return False
+        if is_data_coverage_question(t):
+            return True
     except Exception:
         pass
     if is_same_kpi_followup_text(t):

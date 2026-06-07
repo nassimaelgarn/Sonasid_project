@@ -380,6 +380,22 @@ def main() -> int:
         merged2[:80],
     )
 
+    print("\n=== 14. Plage temporelle base (max/min année) ===")
+    from backend.llm.sonasid_schema import data_coverage_reply, is_data_coverage_question
+    from backend.llm.sonasid_resilience import try_deterministic_sonasid_reply
+
+    cov_q = "okay pour le max year que tu as dan la base"
+    ok_all &= check("detecte question max year base", is_data_coverage_question(cov_q), cov_q)
+    ok_all &= check(
+        "route déterministe plage temporelle",
+        (try_deterministic_sonasid_reply(cov_q) or {}).get("source") == "sonasid:data_coverage",
+        (try_deterministic_sonasid_reply(cov_q) or {}).get("source", ""),
+    )
+    ok_all &= check(
+        "pas confondu avec KPI tonnage",
+        not is_data_coverage_question("tonnage importé en 2025"),
+    )
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

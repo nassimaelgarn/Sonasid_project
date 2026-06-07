@@ -25,6 +25,8 @@ def try_deterministic_sonasid_reply(question: str) -> Optional[Dict[str, Any]]:
     try:
         from backend.llm.sonasid_schema import (
             company_overview_reply,
+            data_coverage_reply,
+            is_data_coverage_question,
             is_schema_metadata_question,
             is_sonasid_company_question,
             schema_metadata_reply,
@@ -32,6 +34,8 @@ def try_deterministic_sonasid_reply(question: str) -> Optional[Dict[str, Any]]:
 
         if is_schema_metadata_question(q):
             return schema_metadata_reply(q)
+        if is_data_coverage_question(q):
+            return data_coverage_reply(q)
         if is_sonasid_company_question(q):
             return company_overview_reply(q)
     except Exception:

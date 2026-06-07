@@ -176,6 +176,107 @@ def is_sonasid_company_question(text: str) -> bool:
     return False
 
 
+def is_data_coverage_question(text: str) -> bool:
+    """Plage temporelle disponible en base (min/max année, pas un KPI métier)."""
+    if not _is_sonasid_profile():
+        return False
+    if is_schema_metadata_question(text):
+        return False
+    ql = re.sub(r"\s+", " ", (text or "").lower()).strip()
+    if not ql:
+        return False
+    has_year = bool(re.search(r"\b(ann[eé]e|year|an\b)", ql))
+    has_bound = bool(
+        re.search(
+            r"\b(max|min|maximum|minimum|derni[eè]re?|premi[eè]re?|plus\s+(récente?|ancienne?|recente?|ancienne?))\b",
+            ql,
+        )
+    )
+    has_base = bool(
+        re.search(
+            r"\b(base|bdd|donn[eé]es|data|sql|disponible|couvert|couvre|tu\s+as|as\s+dans|dans\s+la)\b",
+            ql,
+        )
+    )
+    if has_year and has_bound and (has_base or re.search(r"\b(tu\s+as|que\s+tu\s+as)\b", ql)):
+        return True
+    if re.search(
+        r"\b(quelle?s?\s+ann[eé]es?|years?\s+available|plage\s+temporelle|période\s+couverte|periode\s+couverte)\b",
+        ql,
+    ) and has_base:
+        return True
+    if re.search(r"\b(jusqu['']?à|depuis|entre)\s+(quelle?\s+)?ann[eé]e\b", ql):
+        return True
+    if re.search(r"\b(ann[eé]es?\s+disponibles?|donn[eé]es?\s+disponibles?)\b", ql):
+        return True
+    return False
+
+
+def data_coverage_reply(question: str) -> Dict[str, Any]:
+    """Lit MIN/MAX année sur les arrivages actifs (Azure SQL)."""
+    from backend.database.run_query import run_query
+    from backend.llm.sonasid_answer import friendly_db_error
+    from backend.llm.sonasid_sql import T_ARRIVAGE
+
+    q = (question or "").strip()
+    ql = q.lower()
+    wants_min = bool(re.search(r"\b(min|minimum|premi[eè]re?|plus\s+ancienne?)\b", ql))
+    wants_max = bool(re.search(r"\b(max|maximum|derni[eè]re?|plus\s+(récente?|recente?))\b", ql))
+    if not wants_min and not wants_max:
+        wants_min = wants_max = True
+
+    sql = (
+        f"SELECT MIN(YEAR(a.Arrivage_DateCreation)) AS annee_min, "
+        f"MAX(YEAR(a.Arrivage_DateCreation)) AS annee_max, "
+        f"COUNT(*) AS nombre_arrivages "
+        f"FROM {T_ARRIVAGE} a "
+        f"WHERE a.Arrivage_Actif = 1 AND a.Arrivage_DateCreation IS NOT NULL"
+    )
+    res = run_query(sql)
+    if isinstance(res, str):
+        return {
+            "question": q,
+            "source": "sonasid:data_coverage",
+            "error": "DB_ERROR",
+            "message": friendly_db_error(res),
+        }
+    if not res or not res[0]:
+        return {
+            "question": q,
+            "source": "sonasid:data_coverage",
+            "message": "Aucun arrivage daté trouvé en base.",
+        }
+
+    y_min, y_max, n_arr = res[0]
+    y_min_i = int(y_min) if y_min is not None else None
+    y_max_i = int(y_max) if y_max is not None else None
+    lines = ["**Plage temporelle des arrivages (base connectée)**", ""]
+    if wants_min and y_min_i is not None:
+        lines.append(f"- **Année minimale** : **{y_min_i}**")
+    if wants_max and y_max_i is not None:
+        lines.append(f"- **Année maximale** : **{y_max_i}**")
+    if wants_min and wants_max and y_min_i is not None and y_max_i is not None:
+        lines.append(f"- **Plage couverte** : {y_min_i} → {y_max_i}")
+    if n_arr is not None:
+        lines.append(f"- **Arrivages actifs datés** : {_fmt_overview_num(n_arr)}")
+    lines.append("")
+    lines.append("_Chiffres lus directement sur Azure SQL — aucune invention._")
+    if y_max_i is not None:
+        lines.append(f"\nPour analyser cette période : `parle moi de tous les arrivages de {y_max_i}`.")
+
+    out: Dict[str, Any] = {
+        "question": q,
+        "source": "sonasid:data_coverage",
+        "message": "\n".join(lines).strip(),
+        "nombre_arrivages": int(n_arr) if n_arr is not None else None,
+    }
+    if y_min_i is not None:
+        out["annee_min"] = y_min_i
+    if y_max_i is not None:
+        out["annee_max"] = y_max_i
+    return out
+
+
 def _fmt_overview_num(v: Any) -> str:
     try:
         x = float(v)
