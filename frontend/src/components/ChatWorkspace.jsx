@@ -3400,9 +3400,9 @@ export default function ChatWorkspace() {
                     {m.role !== 'user' && m?.meta?.raw && isTableRows(m.meta.raw.result) ? (
                       (() => {
                         const rows = m.meta.raw.result
-                        const expanded = Boolean(expandedRowsByMsg[idx])
+                        const isKpiCatalog = String(m.meta.raw?.source || '') === 'sql:kpi_catalog'
+                        const expanded = Boolean(expandedRowsByMsg[idx]) || isKpiCatalog
                         if (!expanded && rows.length <= 5) return null
-                        const hiddenCount = Math.max(0, rows.length - 5)
                         return (
                           <div className="mt-2">
                             {!expanded ? (
@@ -3420,23 +3420,25 @@ export default function ChatWorkspace() {
                               </button>
                             ) : (
                               <>
-                                <MiniTable rows={rows} maxHeight={280} />
+                                <MiniTable rows={rows} maxHeight={isKpiCatalog ? 360 : 280} />
                                 <div className="mt-2 flex items-center justify-between">
                                   <div className="text-[11px] text-slate-500 dark:text-slate-400">
                                     {rows.length} lignes
                                   </div>
-                                  <button
-                                    type="button"
-                                    className="btn-ghost text-xs"
-                                    onClick={() =>
-                                      setExpandedRowsByMsg((prev) => ({
-                                        ...prev,
-                                        [idx]: false,
-                                      }))
-                                    }
-                                  >
-                                    Replier
-                                  </button>
+                                  {!isKpiCatalog ? (
+                                    <button
+                                      type="button"
+                                      className="btn-ghost text-xs"
+                                      onClick={() =>
+                                        setExpandedRowsByMsg((prev) => ({
+                                          ...prev,
+                                          [idx]: false,
+                                        }))
+                                      }
+                                    >
+                                      Replier
+                                    </button>
+                                  ) : null}
                                 </div>
                               </>
                             )}

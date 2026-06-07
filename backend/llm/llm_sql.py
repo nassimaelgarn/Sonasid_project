@@ -415,6 +415,50 @@ def list_kpi_catalog() -> List[Dict[str, str]]:
     ]
 
 
+def is_kpi_catalog_table_request(text: str) -> bool:
+    """Catalogue des KPI disponibles, demandé en tableau (pas le brief dashboard)."""
+    ql = re.sub(r"\s+", " ", (text or "").lower()).strip()
+    if not ql:
+        return False
+    has_kpi = bool(re.search(r"\b(kpi|kip|indicateurs?)\b", ql))
+    has_table = bool(
+        re.search(r"\b(tableau|tableaux|tabulaire|sous forme de tableau|sous forme de table)\b", ql)
+    )
+    has_catalog = bool(
+        re.search(
+            r"\b(catalogue|liste|present|présent|présents|disponibles?|dans la base|en base|presents)\b",
+            ql,
+        )
+    )
+    if re.search(r"\b(tous les kpi|toutes les kpi|tous les kpis|catalogue des kpi)\b", ql):
+        return True
+    if has_kpi and has_table:
+        return True
+    if has_kpi and has_catalog and re.search(r"\b(donne|donner|montre|affiche|cite|cites?|liste)\b", ql):
+        return True
+    return False
+
+
+def kpi_catalog_table_reply(question: str) -> Dict[str, Any]:
+    """Retourne le catalogue KPI Sonasid en lignes structurées pour l’UI tableau."""
+    items = list_kpi_catalog()
+    rows = [
+        {
+            "kpi": str(it.get("name") or "").strip(),
+            "question_exemple": str(it.get("question") or "").strip(),
+        }
+        for it in items
+        if str(it.get("name") or "").strip() and str(it.get("question") or "").strip()
+    ]
+    n = len(rows)
+    return {
+        "question": (question or "").strip(),
+        "source": "sql:kpi_catalog",
+        "message": f"**Catalogue KPI Sonasid** — {n} indicateurs disponibles en base.",
+        "result": rows,
+    }
+
+
 def assistant_memory_indicates_pipeline_need_period(content: str) -> bool:
     """Détecte le texte « il manque une période » même si encodage / espaces diffèrent légèrement."""
     raw = (content or "").strip()
@@ -541,6 +585,12 @@ def is_table_format_followup_text(text: str) -> bool:
     """Relance du type « en tableau », « je les veux dans un tableau »."""
     s = re.sub(r"\s+", " ", (text or "").strip().lower())
     if not s:
+        return False
+    if is_kpi_catalog_table_request(s):
+        return False
+    if re.search(r"\b(kpi|kip|indicateurs?|catalogue)\b", s) and re.search(
+        r"\b(donne|donner|montre|affiche|liste|present|présent|presents)\b", s
+    ) and re.search(r"\b(tableau|table|tabulaire|sous forme de)\b", s):
         return False
     if re.search(r"\b(tableau|tableaux|tabulaire|colonnes|grille)\b", s):
         return True

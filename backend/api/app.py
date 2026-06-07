@@ -879,7 +879,11 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
 
     # Schéma / structure table : réponse immédiate (dictionnaire + Azure), sans KPI ni LLM.
     try:
-        from backend.llm.llm_sql import normalize_user_question
+        from backend.llm.llm_sql import (
+            is_kpi_catalog_table_request,
+            kpi_catalog_table_reply,
+            normalize_user_question,
+        )
         from backend.llm.sonasid_schema import (
             company_overview_reply,
             data_coverage_reply,
@@ -890,6 +894,17 @@ def chat(payload: ChatRequest, request: Request) -> Dict[str, Any]:
         )
 
         q_schema = normalize_user_question(q_raw)
+        if is_kpi_catalog_table_request(q_schema):
+            try:
+                add_memory(session_id=sid, role="user", content=q_raw)
+            except Exception:
+                pass
+            res = kpi_catalog_table_reply(q_schema)
+            try:
+                add_memory(session_id=sid, role="assistant", content=_assistant_memory_content(res))
+            except Exception:
+                pass
+            return res
         if is_schema_metadata_question(q_schema):
             try:
                 add_memory(session_id=sid, role="user", content=q_raw)

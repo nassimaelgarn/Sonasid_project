@@ -207,6 +207,14 @@ def detect_sonasid_brief(question: str) -> Optional[Dict[str, str]]:
     if _is_specific_kpi_question(ql):
         return None
 
+    try:
+        from backend.llm.llm_sql import is_kpi_catalog_table_request
+
+        if is_kpi_catalog_table_request(ql):
+            return None
+    except Exception:
+        pass
+
     if _is_vague_port_overview(ql):
         if (
             _is_all_arrivages_overview(ql)

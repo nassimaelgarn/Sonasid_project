@@ -396,6 +396,26 @@ def main() -> int:
         not is_data_coverage_question("tonnage importé en 2025"),
     )
 
+    print("\n=== 15. Catalogue KPI en tableau ===")
+    from backend.llm.llm_sql import is_kpi_catalog_table_request, kpi_catalog_table_reply
+    from backend.llm.sonasid_brief import detect_sonasid_brief
+
+    cat_q = "donne moi les kpi presents dans la base sous forme de tableau"
+    ok_all &= check("detecte catalogue KPI tableau", is_kpi_catalog_table_request(cat_q), cat_q)
+    ok_all &= check(
+        "pas brief dashboard pour catalogue",
+        detect_sonasid_brief(cat_q) is None,
+        str(detect_sonasid_brief(cat_q)),
+    )
+    cat_rep = kpi_catalog_table_reply(cat_q)
+    ok_all &= check(
+        "réponse catalogue structurée",
+        cat_rep.get("source") == "sql:kpi_catalog"
+        and isinstance(cat_rep.get("result"), list)
+        and len(cat_rep.get("result") or []) >= 5,
+        f"rows={len(cat_rep.get('result') or [])}",
+    )
+
     print("\n=== Résultat ===")
     if ok_all:
         print("Tous les tests pré-commit Sonasid sont OK.")

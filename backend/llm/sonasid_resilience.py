@@ -23,6 +23,7 @@ def try_deterministic_sonasid_reply(question: str) -> Optional[Dict[str, Any]]:
     if not q:
         return None
     try:
+        from backend.llm.llm_sql import is_kpi_catalog_table_request, kpi_catalog_table_reply
         from backend.llm.sonasid_schema import (
             company_overview_reply,
             data_coverage_reply,
@@ -34,6 +35,8 @@ def try_deterministic_sonasid_reply(question: str) -> Optional[Dict[str, Any]]:
 
         if is_schema_metadata_question(q):
             return schema_metadata_reply(q)
+        if is_kpi_catalog_table_request(q):
+            return kpi_catalog_table_reply(q)
         if is_data_coverage_question(q):
             return data_coverage_reply(q)
         if is_sonasid_company_question(q):
