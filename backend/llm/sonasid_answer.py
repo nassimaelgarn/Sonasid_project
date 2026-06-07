@@ -220,8 +220,9 @@ def narrate_sql_result(
 
     from backend.llm.sonasid_prompts import sonasid_analyst_domain
 
+    is_table = isinstance(compact, list) and compact and isinstance(compact[0], dict)
     sys = (
-        sonasid_analyst_domain()
+        sonasid_analyst_domain(table_data=is_table)
         + "Réponds en français avec intelligence et clarté (3 à 6 phrases ou puces courtes).\n"
         + "Interprète la question : tendance, comparaison, point clé, alerte, lecture métier (sans jargon SQL).\n"
         + "Ne montre jamais de SQL, de formule technique, ni de mention « synthèse automatique ».\n"
@@ -332,10 +333,19 @@ def llm_enrich_brief_message(
         if extra:
             facts = base + "\n\n" + "\n\n".join(extra)
 
+    rows = out.get("result")
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict) and not dash:
+        import json
+
+        facts = facts + "\n\nTableau de résultats (JSON) :\n" + json.dumps(
+            rows[:40], ensure_ascii=False, default=str
+        )
+
     from backend.llm.sonasid_prompts import sonasid_analyst_domain
 
+    has_table = isinstance(rows, list) and rows and isinstance(rows[0], dict)
     analysis_mode = bool(out.get("dashboard_analysis_requested"))
-    sys = sonasid_analyst_domain()
+    sys = sonasid_analyst_domain(table_data=has_table and not dash)
     if analysis_mode:
         sys += (
             "Tu rédiges une **analyse du dashboard** port & arrivages à partir des chiffres ci-dessous.\n"

@@ -420,13 +420,17 @@ def main() -> int:
         sonasid_analyst_domain,
         sonasid_assistant_domain,
         sonasid_db_access_block,
+        sonasid_intelligence_block,
         sonasid_kpi_rewrite_domain,
     )
 
     block = sonasid_db_access_block()
+    intel = sonasid_intelligence_block()
     ok_all &= check("mention Azure SQL", "Azure SQL" in block, block[:60])
     ok_all &= check("mention toute la base", "TOUTE" in block, block[:60])
     ok_all &= check("interdit refus accès", "JAMAIS" in block and "accès" in block.lower(), block[:60])
+    ok_all &= check("bloc intelligence tables", "ARRIVAGE" in intel and "tableau" in intel.lower(), intel[:60])
+    ok_all &= check("analyste sait analyser tableau", "tableau" in sonasid_analyst_domain(table_data=True).lower(), "")
     conv = sonasid_assistant_domain(conversational=True)
     ok_all &= check("prompt conversationnel sans N'exécute pas SQL", "N'exécute pas" not in conv, conv[:80])
     ok_all &= check("prompt KPI rewrite accès base", "Azure SQL" in sonasid_kpi_rewrite_domain(), "")
@@ -438,7 +442,6 @@ def main() -> int:
 
     dash_q = "tu peux me créer un petit dashboard pour analyse ces KPI"
     dash_m = "tu peux me créer un petit dashboard pour analyse ces KPI par mois"
-    analyse_dash = "je veux une analyse du dashboard"
     analyse_dash = "je veux une analyse du dashboard"
     ok_all &= check("detecte dashboard explicite", is_explicit_dashboard_request(dash_q.lower()), dash_q[:50])
     ok_all &= check(
