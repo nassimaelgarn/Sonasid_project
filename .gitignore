@@ -7,10 +7,24 @@ __pycache__/
 # Environment
 .env
 
-# Database
-db/*.db
-db/langgraph_checkpoints.sqlite
-db/langgraph_checkpoints.sqlite-*
+# Base locale facultative + mémoire chat (jamais sur GitHub)
+db/*
+!db/.gitkeep
+
+# SQLite / checkpoints agent (fichiers facultatifs locaux)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs facultatifs
+*.log
+logs/
+
+# Fichiers temp Excel (Office)
+~$*
+
+# Anciennes données aciérie (POC retiré)
+data/
 
 # Node / frontend
 node_modules/
